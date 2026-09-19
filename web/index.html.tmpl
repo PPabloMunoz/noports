@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>noports</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Geist:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* Hallmark · pre-emit critique: P4 H5 E4 S5 R5 V5 */
+    /* Hallmark · genre: modern-minimal · macrostructure: Index-First · theme: Cobalt · enrichment: none (typography only) · nav: N9 · footer: Ft2 */
+    /* Hallmark · macrostructure: Index-First · tone: modern utilitarian · anchor hue: cobalt 260 · contrast: pass (40-41) · nav: N9 · footer: Ft2 · slop: pass (42-45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34,49,50-57) */
+    :root {
+      --color-paper:    oklch(15% 0.010 260);
+      --color-paper-2:  oklch(19% 0.012 260);
+      --color-rule:     oklch(28% 0.010 260);
+      --color-neutral:  oklch(65% 0.010 260);
+      --color-muted:    oklch(70% 0.008 260);
+      --color-ink:      oklch(94% 0.006 260);
+      --color-accent:   oklch(68% 0.180 260);
+      --color-accent-ink: oklch(16% 0.012 260);
+      --color-focus:    oklch(72% 0.190 260);
+      --color-success:  oklch(70% 0.150 160);
+
+      --font-display: "Space Grotesk", "Geist", ui-sans-serif, system-ui, sans-serif;
+      --font-body:    "Geist", ui-sans-serif, system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+      --space-3xs: 0.125rem;
+      --space-2xs: 0.25rem;
+      --space-xs:  0.5rem;
+      --space-sm:  0.75rem;
+      --space-md:  1rem;
+      --space-lg:  1.5rem;
+      --space-xl:  2.5rem;
+      --space-2xl: 4rem;
+      --space-3xl: 6rem;
+      --space-4xl: 9rem;
+
+      --text-xs:   0.64rem;
+      --text-sm:   0.8rem;
+      --text-base: 1rem;
+      --text-md:   1.25rem;
+      --text-lg:   1.5625rem;
+      --text-2xl:  2.4414rem;
+
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --dur-micro: 120ms;
+      --dur-short: 220ms;
+      --dur-long: 420ms;
+
+      --radius-tight: 6px;
+      --radius-pill: 999px;
+
+      --z-base: 1;
+      --z-raised: 10;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --color-paper:    oklch(98% 0.005 260);
+        --color-paper-2:  oklch(94% 0.008 260);
+        --color-rule:     oklch(88% 0.010 260);
+        --color-neutral:  oklch(55% 0.012 260);
+        --color-muted:    oklch(45% 0.012 260);
+        --color-ink:      oklch(24% 0.012 260);
+        --color-accent:   oklch(50% 0.210 260);
+        --color-accent-ink: oklch(98% 0.005 260);
+        --color-focus:    oklch(55% 0.220 260);
+        --color-success:  oklch(60% 0.160 160);
+      }
+    }
+
+    html { overflow-x: clip; }
+    body { overflow-x: clip; }
+
+    body {
+      margin: 0;
+      background-color: var(--color-paper);
+      color: var(--color-ink);
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      max-width: 48rem;
+      margin-inline: auto;
+      padding-block: var(--space-lg);
+      padding-inline: clamp(1rem, 4vw, 1.5rem);
+    }
+
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      color: var(--color-muted);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: var(--radius-pill);
+      background-color: var(--color-success);
+    }
+
+    .count {
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      color: var(--color-muted);
+      white-space: nowrap;
+    }
+
+    .wrap {
+      max-width: 48rem;
+      margin-inline: auto;
+      padding-inline: clamp(1rem, 4vw, 1.5rem);
+      padding-block-end: var(--space-2xl);
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-style: normal;
+      font-weight: 700;
+      font-size: var(--text-2xl);
+      letter-spacing: -0.02em;
+      line-height: 1.05;
+      margin: 0;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+
+    .lede {
+      margin: 0;
+      margin-block-start: var(--space-xs);
+      margin-block-end: var(--space-xl);
+      color: var(--color-muted);
+      max-width: 65ch;
+    }
+
+    .routes {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border-block-end: 1px solid var(--color-rule);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-sm) var(--space-md);
+      align-items: center;
+      padding-block: var(--space-md);
+      border-block-start: 1px solid var(--color-rule);
+    }
+
+    .ident {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3xs);
+      min-width: 0;
+    }
+
+    .host {
+      font-family: var(--font-mono);
+      font-size: var(--text-base);
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+
+    .dest {
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      color: var(--color-muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: var(--space-xs);
+      align-items: center;
+      line-height: 1;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding-inline: var(--space-md);
+      border: 1px solid var(--color-ink);
+      border-radius: var(--radius-tight);
+      background-color: var(--color-paper);
+      color: var(--color-ink);
+      font-family: var(--font-body);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+    }
+
+    .btn-primary {
+      background-color: var(--color-ink);
+      color: var(--color-paper);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 2px;
+    }
+
+    .btn[data-state="copied"] {
+      border-color: var(--color-success);
+    }
+
+    .empty {
+      border-block-start: 1px solid var(--color-rule);
+      padding-block: var(--space-xl);
+      color: var(--color-muted);
+      max-width: 65ch;
+    }
+
+    .empty code {
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      background-color: var(--color-paper-2);
+      padding-inline: var(--space-xs);
+      border-radius: var(--radius-tight);
+    }
+
+    .foot {
+      max-width: 48rem;
+      margin-inline: auto;
+      padding-inline: clamp(1rem, 4vw, 1.5rem);
+      padding-block: var(--space-md) var(--space-xl);
+      border-block-start: 1px solid var(--color-rule);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-muted);
+      white-space: nowrap;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .btn:hover {
+        background-color: var(--color-paper-2);
+      }
+      .btn-primary:hover {
+        background-color: var(--color-accent);
+        border-color: var(--color-accent);
+        color: var(--color-accent-ink);
+      }
+      .row:hover .host {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    @media (max-width: 40rem) {
+      .row {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .actions {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 150ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 150ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <span class="live"><span class="dot" aria-hidden="true"></span>local daemon</span>
+    <span class="count">{{len .Routes}} active</span>
+  </header>
+  <main class="wrap">
+    <h1>noports</h1>
+    <p class="lede">Routes served by this daemon.</p>
+    {{if .Routes}}
+    <ul class="routes">
+      {{range .Routes}}
+      <li class="row">
+        <div class="ident">
+          <span class="host">{{.Hostname}}</span>
+          <span class="dest">localhost:{{.Port}}</span>
+        </div>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://{{.Hostname}}">Visit</a>
+          <button class="btn" type="button" data-copy="{{.Hostname}}"><span class="btn-label">Copy</span></button>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="empty">
+      <p>No routes registered.</p>
+      <p>Run <code>noports run</code> to add one.</p>
+    </div>
+    {{end}}
+  </main>
+  <footer class="foot">noports · served locally · {{len .Routes}} routes</footer>
+  <script>
+    document.querySelectorAll("[data-copy]").forEach(function (btn) {
+      var label = btn.querySelector(".btn-label");
+      var original = label.textContent;
+      var timer = null;
+      function revert() {
+        delete btn.dataset.state;
+        label.textContent = original;
+      }
+      btn.addEventListener("mouseleave", function () {
+        if (btn.dataset.state) {
+          clearTimeout(timer);
+          revert();
+        }
+      });
+      btn.addEventListener("click", function () {
+        var value = btn.getAttribute("data-copy");
+        function done(ok) {
+          clearTimeout(timer);
+          if (ok) {
+            btn.dataset.state = "copied";
+            label.textContent = "Copied";
+            timer = setTimeout(revert, 2500);
+          } else {
+            label.textContent = "Copy failed";
+            timer = setTimeout(revert, 2500);
+          }
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(value).then(function () { done(true); }, function () { done(false); });
+        } else {
+          var ta = document.createElement("textarea");
+          ta.value = value;
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            done(document.execCommand("copy"));
+          } catch (e) {
+            done(false);
+          }
+          document.body.removeChild(ta);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
