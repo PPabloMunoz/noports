@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -43,8 +44,23 @@ func IsDaemonRunning() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = os.ReadFile(daemonPIDFilePath)
+
+	pidBytes, err := os.ReadFile(daemonPIDFilePath)
 	if err != nil {
+		return false, err
+	}
+
+	pid, err := strconv.Atoi(string(pidBytes))
+	if err != nil {
+		return false, nil
+	}
+
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false, err
+	}
+
+	if err := p.Signal(syscall.Signal(0)); err != nil {
 		return false, nil
 	}
 	return true, nil
