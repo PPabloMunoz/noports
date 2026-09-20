@@ -22,7 +22,6 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 	if addr == "" {
 		addr = DefaultProxyAddr
 	}
-	// TODO: websocket support for HMR / hot reload.
 	srv := &http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
