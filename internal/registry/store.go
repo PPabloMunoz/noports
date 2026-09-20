@@ -43,6 +43,7 @@ func (s *Store) Add(r Route) error {
 	}
 	s.mu.Lock()
 	if _, ok := s.routes[r.Hostname]; ok {
+		s.mu.Unlock()
 		return fmt.Errorf("%s hostname already exists. Remove the previous first", r.Hostname)
 	}
 	s.routes[r.Hostname] = r
