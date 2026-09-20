@@ -4,11 +4,9 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
-	"github.com/ppablomunoz/noports/internal/ipc"
 	"github.com/spf13/cobra"
 )
 
@@ -26,32 +24,7 @@ CORS quirks, and credential sync issues across concurrent projects.
 	`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		conn, err := ipc.Dial()
-		if err != nil {
-			return fmt.Errorf("failed to connect to socket: %v", err)
-		}
-		defer func() { _ = conn.Close() }()
-
-		encoder := json.NewEncoder(conn)
-		decoder := json.NewDecoder(conn)
-
-		req := ipc.Request{
-			Command:   ipc.CmdAliasAdd,
-			Hostname:  "app.localhost",
-			LocalPort: 4321,
-			PID:       -1,
-		}
-		if err := encoder.Encode(req); err != nil {
-			return fmt.Errorf("failed to encode request: %w", err)
-		}
-
-		// wait for response
-		var res ipc.Response
-		if err := decoder.Decode(&res); err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
-		}
-
-		fmt.Printf("OK: %v -- Error: '%s' -- Data: '%v'\n", res.OK, res.Error, res.Data)
+		fmt.Println("Welcome to Noports")
 		return nil
 	},
 }
