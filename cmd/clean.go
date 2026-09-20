@@ -23,18 +23,18 @@ var cleanCmd = &cobra.Command{
 		}
 
 		var answer string
-		fmt.Println("This will remove all the routes registered and remove and uninstall all certs created.")
-		fmt.Print("Do you want to continue [y/N]:")
+		client.Info("This will remove all the routes registered and remove and uninstall all certs created.\n")
+		client.Warning("Do you want to continue [y/N]: ")
 		_, _ = fmt.Scanln(&answer)
 		if answer != "y" && answer != "Y" {
-			fmt.Println("Canceling cleaning")
+			client.Info("Canceling cleaning\n")
 			return nil
 		}
 
 		if err := pki.UninstallCA(); err != nil {
 			return err
 		}
-		fmt.Println("CA uninstalled")
+		client.Info("CA uninstalled\n")
 
 		certsDir, err := paths.GetCertsDirPath()
 		if err != nil {
@@ -43,7 +43,7 @@ var cleanCmd = &cobra.Command{
 		if err := os.RemoveAll(certsDir); err != nil {
 			return fmt.Errorf("failed to delete certificates dir: %w", err)
 		}
-		fmt.Println("All certificates removed")
+		client.Info("leaf certificates removed\n")
 
 		routesPath, err := paths.GetRoutesFilePath()
 		if err != nil {
@@ -52,9 +52,9 @@ var cleanCmd = &cobra.Command{
 		if err := os.Remove(routesPath); err != nil {
 			return fmt.Errorf("failed to delete %s: %w", routesPath, err)
 		}
-		fmt.Println("Routes deleted")
+		client.Info("routes deleted\n")
 
-		fmt.Println("CLEAN COMPLETED")
+		client.Success("clean completed\n")
 		return nil
 	},
 }
