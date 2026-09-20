@@ -21,7 +21,7 @@ and open `https://api.localhost`.
 - Persisted routes in `~/.noports/routes.json`
 - Web dashboard at `https://localhost`
 - Auto-starts daemon and CA on first `run` / `alias` / `list` / `get`
-- `run` injects `--port <port>` and `PORT=<port>` into the child process
+- `run` sets `PORT` (plus `NOPORTS_PORT`, `NOPORTS_NAME`, `NOPORTS_URL`) in the child process environment, and appends `--port <port>` to the child args only with `--port-arg` (needed by some frameworks, e.g. `astro dev`)
 
 ## Requirements
 
@@ -67,6 +67,15 @@ With an explicit port:
 noports run --name api --port 3000 npm start
 ```
 
+For frameworks that need a `--port` CLI flag instead of the `PORT` env var (e.g. Astro):
+
+```sh
+noports run --name web --port-arg astro dev
+# https://web.localhost
+```
+
+`noports` flags must come before the command; everything after it is passed to the child verbatim. `--` works as an explicit separator but is optional.
+
 Map an already-running service:
 
 ```sh
@@ -90,8 +99,8 @@ https://localhost
 ## Commands
 
 | Command | Usage |
-|---|---|
-| `run` | `noports run [--name <name>] [--port <port>] <cmd> [args...]` |
+| --- | --- |
+| `run` | `noports run [--name <name>] [--port <port>] [--port-arg] [--] <cmd> [args...]` |
 | `alias` | `noports alias <name> <port>` |
 | `alias --remove` | `noports alias --remove <name>` / `noports alias -r <name>` |
 | `get` | `noports get <name>` — prints `https://<name>.localhost` |
@@ -103,7 +112,7 @@ https://localhost
 
 Notes:
 
-- `run` requires at least one arg (the command to execute). It appends `--port <port>` to the child args and sets `PORT` in its environment. The route is removed automatically when the child exits or on `Ctrl-C`.
+- `run` requires at least one arg (the command to execute). It sets `PORT`, `NOPORTS_PORT`, `NOPORTS_NAME`, and `NOPORTS_URL` (`https://<name>.localhost`) in the child environment, replacing any existing values. It appends `--port <port>` to the child args only when `--port-arg` is passed. The route is removed automatically when the child exits or on `Ctrl-C`.
 - `get <name>` accepts the bare name (`api`), the daemon resolves it as `api.localhost`.
 - Most commands call `EnsureProxy` first, so the daemon and CA are created automatically if missing.
 - `clean` prompts for confirmation and removes the CA, `~/.noports/certs`, and `~/.noports/routes.json`.
@@ -138,7 +147,7 @@ CLI (run/alias/list/get)
 ## Files and configuration
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | `/tmp/noports.sock` | Daemon control socket (`$NOPORTS_SOCKET` overrides) |
 | `~/.noports/routes.json` | Persisted routes |
 | `~/.noports/daemon.pid` | Daemon PID file |
