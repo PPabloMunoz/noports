@@ -14,7 +14,7 @@ import (
 var proxyCmd = &cobra.Command{
 	Use:       "proxy <start|stop>",
 	Short:     "Start and stop proxy daemon",
-	Args:      cobra.OnlyValidArgs,
+	Args:      cobra.ExactArgs(1),
 	ValidArgs: []string{"start", "stop"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isRunning, err := client.IsDaemonRunning()
