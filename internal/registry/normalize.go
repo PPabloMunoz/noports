@@ -21,10 +21,7 @@ func NormalizeHostname(input string) (string, error) {
 		return "", fmt.Errorf("name is required")
 	}
 
-	bare := s
-	if strings.HasSuffix(s, localhostSuffix) {
-		bare = strings.TrimSuffix(s, localhostSuffix)
-	}
+	bare, _ := strings.CutSuffix(s, localhostSuffix)
 	bare = strings.Trim(bare, ".")
 	if bare == "" {
 		return "", fmt.Errorf("invalid name %q: use letters, numbers and hyphens (e.g. api)", input)
