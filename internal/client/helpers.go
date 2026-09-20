@@ -31,8 +31,8 @@ func PrintRoutesTable(routes []registry.Route) {
 
 	_, _ = fmt.Fprintf(w, "NAME\tHOST\tPORT\tPID\n")
 	for _, r := range routes {
-		name := strings.Split(r.Hostname, ".")
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%d\n", name[0], r.Hostname, r.Port, r.PID)
+		name := registry.BareName(r.Hostname)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%d\n", name, r.Hostname, r.Port, r.PID)
 	}
 
 	_ = w.Flush()

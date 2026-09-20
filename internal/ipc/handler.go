@@ -54,7 +54,12 @@ func handleGet(encoder *json.Encoder, store *registry.Store, req *Request) error
 		return sendResponse(encoder, &Response{OK: false, Error: "hostname is required"})
 	}
 
-	route, err := store.Get(req.Hostname)
+	hostname, err := registry.NormalizeHostname(req.Hostname)
+	if err != nil {
+		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
+	}
+
+	route, err := store.Get(hostname)
 	if err != nil {
 		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
 	}
@@ -73,8 +78,9 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 	port := req.LocalPort
 	pid := req.PID
 
-	if name == "" {
-		return sendResponse(encoder, &Response{OK: false, Error: "name is required"})
+	hostname, err := registry.NormalizeHostname(name)
+	if err != nil {
+		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
 	}
 	if port <= 0 {
 		return sendResponse(encoder, &Response{OK: false, Error: "port is required"})
@@ -83,7 +89,6 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 		return sendResponse(encoder, &Response{OK: false, Error: "pid is invalid"})
 	}
 
-	hostname := fmt.Sprintf("%s.localhost", name)
 	newRoute := &registry.Route{Hostname: hostname, Port: port, PID: pid}
 
 	if err := store.Add(*newRoute); err != nil {
@@ -94,13 +99,10 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 }
 
 func handleAliasRemove(encoder *json.Encoder, store *registry.Store, req *Request) error {
-	name := req.Hostname
-
-	if name == "" {
-		return sendResponse(encoder, &Response{OK: false, Error: "name is required"})
+	hostname, err := registry.NormalizeHostname(req.Hostname)
+	if err != nil {
+		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
 	}
-
-	hostname := fmt.Sprintf("%s.localhost", name)
 
 	if err := store.Remove(hostname); err != nil {
 		return sendResponse(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to remove '%s' route: %v", hostname, err)})

@@ -34,10 +34,14 @@ func (s *Store) List() map[string]Route {
 }
 
 // Add inserts a new route; it fails if the hostname already exists.
+// The hostname may be a bare name ("api") or fully-qualified
+// ("api.localhost"); it is normalized to lowercase "name.localhost".
 func (s *Store) Add(r Route) error {
-	if r.Hostname == "" {
-		return fmt.Errorf("hostname is required")
+	hostname, err := NormalizeHostname(r.Hostname)
+	if err != nil {
+		return err
 	}
+	r.Hostname = hostname
 	if r.Port == 0 {
 		return fmt.Errorf("port is required")
 	}
@@ -51,22 +55,30 @@ func (s *Store) Add(r Route) error {
 	return Save(s)
 }
 
-// Get returns the route for hostname.
+// Get returns the route for hostname (bare name or "name.localhost", any case).
 func (s *Store) Get(hostname string) (*Route, error) {
+	normalized, err := NormalizeHostname(hostname)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	r, ok := s.routes[hostname]
+	r, ok := s.routes[normalized]
 	if !ok {
-		return nil, fmt.Errorf("route with %s hostname is not registered", hostname)
+		return nil, fmt.Errorf("route with %s hostname is not registered", normalized)
 	}
 	cp := r
 	return &cp, nil
 }
 
-// Remove deletes the route for hostname.
+// Remove deletes the route for hostname (bare name or "name.localhost", any case).
 func (s *Store) Remove(hostname string) error {
+	normalized, err := NormalizeHostname(hostname)
+	if err != nil {
+		return err
+	}
 	s.mu.Lock()
-	delete(s.routes, hostname)
+	delete(s.routes, normalized)
 	s.mu.Unlock()
 	return Save(s)
 }

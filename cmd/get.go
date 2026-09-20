@@ -9,6 +9,7 @@ import (
 
 	"github.com/ppablomunoz/noports/internal/client"
 	"github.com/ppablomunoz/noports/internal/ipc"
+	"github.com/ppablomunoz/noports/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +19,10 @@ var getCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Short: "Get the data the route with name",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
+		hostname, err := registry.NormalizeHostname(args[0])
+		if err != nil {
+			return err
+		}
 
 		if err := client.EnsureProxy(); err != nil {
 			return err
@@ -33,7 +37,7 @@ var getCmd = &cobra.Command{
 		encoder := json.NewEncoder(conn)
 		decoder := json.NewDecoder(conn)
 
-		req := &ipc.Request{Command: ipc.CmdGet, Hostname: fmt.Sprintf("%s.localhost", name)}
+		req := &ipc.Request{Command: ipc.CmdGet, Hostname: hostname}
 		if err := client.SendRequest(encoder, req); err != nil {
 			return err
 		}

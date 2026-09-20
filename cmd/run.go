@@ -16,6 +16,7 @@ import (
 
 	"github.com/ppablomunoz/noports/internal/client"
 	"github.com/ppablomunoz/noports/internal/ipc"
+	"github.com/ppablomunoz/noports/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -48,6 +49,12 @@ var runCmd = &cobra.Command{
 			name = filepath.Base(wd)
 		}
 
+		hostname, err := registry.NormalizeHostname(name)
+		if err != nil {
+			return err
+		}
+		name = registry.BareName(hostname)
+
 		if err := client.EnsureProxy(); err != nil {
 			return err
 		}
@@ -74,7 +81,7 @@ var runCmd = &cobra.Command{
 		env = client.SetEnv(env, "PORT", strconv.Itoa(port))
 		env = client.SetEnv(env, "NOPORTS_PORT", strconv.Itoa(port))
 		env = client.SetEnv(env, "NOPORTS_NAME", name)
-		env = client.SetEnv(env, "NOPORTS_URL", fmt.Sprintf("https://%s.localhost", name))
+		env = client.SetEnv(env, "NOPORTS_URL", fmt.Sprintf("https://%s", hostname))
 		command.Env = env
 		command.Stdout = os.Stdout
 		command.Stderr = os.Stderr
@@ -95,7 +102,7 @@ var runCmd = &cobra.Command{
 		encoder := json.NewEncoder(conn)
 		decoder := json.NewDecoder(conn)
 
-		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: name, LocalPort: port, PID: command.Process.Pid}
+		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: command.Process.Pid}
 		if err := client.SendRequest(encoder, req); err != nil {
 			_ = command.Process.Signal(os.Interrupt)
 			return err

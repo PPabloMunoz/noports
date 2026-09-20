@@ -10,6 +10,7 @@ import (
 
 	"github.com/ppablomunoz/noports/internal/client"
 	"github.com/ppablomunoz/noports/internal/ipc"
+	"github.com/ppablomunoz/noports/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,10 @@ var aliasCmd = &cobra.Command{
 	Short: "A brief description of your command",
 	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
+		hostname, err := registry.NormalizeHostname(args[0])
+		if err != nil {
+			return err
+		}
 		port := -1
 
 		if len(args) == 2 {
@@ -44,7 +48,7 @@ var aliasCmd = &cobra.Command{
 		decoder := json.NewDecoder(conn)
 
 		if cmd.Flags().Changed("remove") {
-			req := &ipc.Request{Command: ipc.CmdAliasRemove, Hostname: name}
+			req := &ipc.Request{Command: ipc.CmdAliasRemove, Hostname: hostname}
 			if err := client.SendRequest(encoder, req); err != nil {
 				return err
 			}
@@ -62,7 +66,7 @@ var aliasCmd = &cobra.Command{
 			return fmt.Errorf("invalid port")
 		}
 
-		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: name, LocalPort: port, PID: -1}
+		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: -1}
 		if err := client.SendRequest(encoder, req); err != nil {
 			return err
 		}
