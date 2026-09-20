@@ -21,16 +21,23 @@ import (
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
-	Use:   "run",
+	Use:   "run [flags] -- <command> [args...]",
 	Short: "Run an app",
+	Example: `  noports run --name web -- python3 -m http.server
+  noports run --name web --port-arg -- astro dev`,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		nameFlag := cmd.Flag("name")
-		name := nameFlag.Value.String()
-		portFlag := cmd.Flag("port")
-		port, err := strconv.Atoi(portFlag.Value.String())
+		name, err := cmd.Flags().GetString("name")
+		if err != nil {
+			return err
+		}
+		port, err := cmd.Flags().GetInt("port")
 		if err != nil {
 			return fmt.Errorf("invalid port")
+		}
+		portArg, err := cmd.Flags().GetBool("port-arg")
+		if err != nil {
+			return err
 		}
 
 		if name == "" {
@@ -45,18 +52,30 @@ var runCmd = &cobra.Command{
 			return err
 		}
 
-		if !portFlag.Changed {
+		if cmd.Flags().Changed("port") {
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("invalid port %d: must be between 1 and 65535", port)
+			}
+		} else {
 			port, err = client.GetRandomPort()
 			if err != nil {
 				return err
 			}
 		}
 
-		// Run command
-		args = append(args, "--port", strconv.Itoa(port))
-		command := exec.Command(args[0], args[1:]...)
-		command.Env = os.Environ()
-		command.Env = append(command.Env, fmt.Sprintf("PORT=%d", port))
+		// Run command. Only some frameworks (e.g. astro dev) need a
+		// --port CLI flag; the rest pick up PORT from the environment.
+		childArgs := args[1:]
+		if portArg {
+			childArgs = append(append([]string{}, childArgs...), "--port", strconv.Itoa(port))
+		}
+		command := exec.Command(args[0], childArgs...)
+		env := os.Environ()
+		env = client.SetEnv(env, "PORT", strconv.Itoa(port))
+		env = client.SetEnv(env, "NOPORTS_PORT", strconv.Itoa(port))
+		env = client.SetEnv(env, "NOPORTS_NAME", name)
+		env = client.SetEnv(env, "NOPORTS_URL", fmt.Sprintf("https://%s.localhost", name))
+		command.Env = env
 		command.Stdout = os.Stdout
 		command.Stderr = os.Stderr
 		command.Stdin = os.Stdin
@@ -133,6 +152,12 @@ var runCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.PersistentFlags().String("name", "", "Name the route")
-	runCmd.PersistentFlags().Int("port", -1, "Port to run the app")
+	// Stop flag parsing at the first positional arg so child args that
+	// look like flags (e.g. `astro dev --port 4321`) are passed through
+	// verbatim. noports flags must therefore come before the command.
+	// `--` is still accepted as an explicit separator but is optional.
+	runCmd.Flags().SetInterspersed(false)
+	runCmd.Flags().String("name", "", "Name the route")
+	runCmd.Flags().Int("port", 0, "Port to run the app (default: random free port)")
+	runCmd.Flags().Bool("port-arg", false, "Append --port <port> to the child command (needed by some frameworks, e.g. astro)")
 }

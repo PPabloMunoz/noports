@@ -149,6 +149,19 @@ func GetRandomPort() (int, error) {
 	return port, nil
 }
 
+// SetEnv returns env with key set to value, replacing any existing entry
+// instead of appending a duplicate.
+func SetEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
+}
+
 func CleanUpCommand(command *exec.Cmd, name string, res *ipc.Response) error {
 	conn, err := ConnectToSocket()
 	if err != nil {
