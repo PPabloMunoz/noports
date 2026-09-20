@@ -4,8 +4,7 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/ppablomunoz/noports/internal/client"
 	"github.com/ppablomunoz/noports/internal/pki"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +17,7 @@ var trustCmd = &cobra.Command{
 		if err := pki.EnsureCA(); err != nil {
 			return err
 		}
-		fmt.Println("CA Installed")
+		client.Info("CA Installed\n")
 		return nil
 	},
 }

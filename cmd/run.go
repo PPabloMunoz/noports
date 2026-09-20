@@ -9,8 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -38,8 +38,7 @@ var runCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to get working dir: %w", err)
 			}
-			dirs := strings.Split(wd, "/")
-			name = dirs[len(dirs)-1]
+			name = filepath.Base(wd)
 		}
 
 		if err := client.EnsureProxy(); err != nil {
@@ -55,7 +54,7 @@ var runCmd = &cobra.Command{
 
 		// Run command
 		args = append(args, "--port", strconv.Itoa(port))
-		command := exec.Command(args[0], args...)
+		command := exec.Command(args[0], args[1:]...)
 		command.Env = os.Environ()
 		command.Env = append(command.Env, fmt.Sprintf("PORT=%d", port))
 		command.Stdout = os.Stdout

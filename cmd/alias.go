@@ -54,7 +54,7 @@ var aliasCmd = &cobra.Command{
 				return err
 			}
 
-			fmt.Println("Alias removed")
+			client.Info("Alias removed\n")
 			return nil
 		}
 
@@ -72,7 +72,7 @@ var aliasCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Println("Alias added")
+		client.Info("Alias added\n")
 		return nil
 	},
 }

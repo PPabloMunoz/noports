@@ -31,7 +31,6 @@ func EnsureCA() error {
 	}
 
 	if !paths.Exists(certPath) || !paths.Exists(keyPath) {
-		fmt.Println("Generating CA...")
 		if err := generateCA(); err != nil {
 			return err
 		}
@@ -42,7 +41,6 @@ func EnsureCA() error {
 		return err
 	}
 	if !trusted {
-		fmt.Println("CA certificate not found. Installing CA...")
 		if err := installCA(); err != nil {
 			return err
 		}
@@ -107,7 +105,6 @@ func generateCA() error {
 		return err
 	}
 
-	fmt.Println("CA created")
 	return nil
 }
 

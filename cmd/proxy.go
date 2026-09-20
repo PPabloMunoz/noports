@@ -25,7 +25,7 @@ var proxyCmd = &cobra.Command{
 		switch args[0] {
 		case "start":
 			if isRunning {
-				fmt.Println("Already running")
+				client.Info("Already running\n")
 				return nil
 			}
 			if err := client.EnsureProxy(); err != nil {
@@ -33,7 +33,7 @@ var proxyCmd = &cobra.Command{
 			}
 		case "stop":
 			if !isRunning {
-				fmt.Println("Already stopped")
+				client.Info("Already stopped\n")
 				return nil
 			}
 			if err := client.StopProxy(); err != nil {
