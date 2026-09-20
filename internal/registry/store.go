@@ -33,6 +33,26 @@ func (s *Store) List() map[string]Route {
 	return out
 }
 
+// Load save all the routes into Store without saving it into routes.json. This function SHOULD
+// ONLY be used on the intial load of the daemon process, it overwrite anything saved that has
+// the same key
+func (s *Store) Load(routes []Route) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range routes {
+		hostname, err := NormalizeHostname(r.Hostname)
+		if err != nil {
+			return err
+		}
+		r.Hostname = hostname
+		if r.Port <= 0 {
+			return fmt.Errorf("port is required")
+		}
+		s.routes[r.Hostname] = r
+	}
+	return nil
+}
+
 // Add inserts a new route; it fails if the hostname already exists.
 // The hostname may be a bare name ("api") or fully-qualified
 // ("api.localhost"); it is normalized to lowercase "name.localhost".
@@ -42,16 +62,15 @@ func (s *Store) Add(r Route) error {
 		return err
 	}
 	r.Hostname = hostname
-	if r.Port == 0 {
+	if r.Port <= 0 {
 		return fmt.Errorf("port is required")
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.routes[r.Hostname]; ok {
-		s.mu.Unlock()
 		return fmt.Errorf("%s hostname already exists. Remove the previous first", r.Hostname)
 	}
 	s.routes[r.Hostname] = r
-	s.mu.Unlock()
 	return Save(s)
 }
 
@@ -78,7 +97,7 @@ func (s *Store) Remove(hostname string) error {
 		return err
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.routes, normalized)
-	s.mu.Unlock()
 	return Save(s)
 }

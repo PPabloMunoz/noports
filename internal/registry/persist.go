@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 
 	"github.com/ppablomunoz/noports/internal/paths"
 )
@@ -45,8 +44,6 @@ func Load(s *Store) error {
 	return nil
 }
 
-var saveMu sync.Mutex
-
 // Save persists all routes in s to routes.json atomically.
 func Save(s *Store) error {
 	routesPath, err := paths.GetRoutesFilePath()
@@ -64,9 +61,6 @@ func Save(s *Store) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal routes: %w", err)
 	}
-
-	saveMu.Lock()
-	defer saveMu.Unlock()
 
 	tmp := routesPath + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
