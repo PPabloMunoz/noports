@@ -24,7 +24,6 @@ const (
 	ColorGreen  = "\033[32m"
 	ColorYellow = "\033[33m"
 	ColorBlue   = "\033[34m"
-	ColorCyan   = "\033[36m"
 )
 
 func PrintRoutesTable(routes []registry.Route) {
@@ -40,14 +39,14 @@ func PrintRoutesTable(routes []registry.Route) {
 }
 
 func IsDaemonRunning() (bool, error) {
-	daemonPIDFilePath, err := paths.GetPIDFilePath()
+	pidFilePath, err := paths.GetPIDFilePath()
 	if err != nil {
 		return false, err
 	}
 
-	pidBytes, err := os.ReadFile(daemonPIDFilePath)
+	pidBytes, err := os.ReadFile(pidFilePath)
 	if err != nil {
-		return false, err
+		return false, nil
 	}
 
 	pid, err := strconv.Atoi(string(pidBytes))
@@ -88,27 +87,38 @@ func StartProxy() error {
 }
 
 func StopProxy() error {
-	daemonPIDFilePath, err := paths.GetPIDFilePath()
+	running, err := IsDaemonRunning()
 	if err != nil {
 		return err
 	}
-	daemonPIDBytes, err := os.ReadFile(daemonPIDFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", daemonPIDFilePath, err)
+
+	if !running {
+		return nil
 	}
 
-	daemonPID, err := strconv.Atoi(string(daemonPIDBytes))
+	pidFilePath, err := paths.GetPIDFilePath()
 	if err != nil {
-		return fmt.Errorf("failed to convert daemon PID '%s' to int: %w", string(daemonPIDBytes), err)
+		return err
+	}
+	pidBytes, err := os.ReadFile(pidFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", pidFilePath, err)
 	}
 
-	p, err := os.FindProcess(daemonPID)
+	pid, err := strconv.Atoi(string(pidBytes))
+	if err != nil {
+		return fmt.Errorf("failed to convert daemon PID '%s' to int: %w", string(pidBytes), err)
+	}
+
+	p, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("failed to find proxy process: %w", err)
 	}
+
 	if err := p.Signal(os.Interrupt); err != nil {
 		return fmt.Errorf("failed to kill proxy process: %w", err)
 	}
+
 	return nil
 }
 
@@ -162,15 +172,20 @@ func CleanUpCommand(command *exec.Cmd, name string, res *ipc.Response) error {
 
 func Success(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s\n", ColorGreen, msg, ColorReset)
+	fmt.Printf("%s%s%s", ColorGreen, msg, ColorReset)
 }
 
 func Info(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s\n", ColorBlue, msg, ColorReset)
+	fmt.Printf("%s%s%s", ColorBlue, msg, ColorReset)
+}
+
+func Warning(format string, v ...any) {
+	msg := fmt.Sprintf(format, v...)
+	fmt.Printf("%s%s%s", ColorYellow, msg, ColorReset)
 }
 
 func Error(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s\n", ColorRed, msg, ColorReset)
+	fmt.Printf("%s%s%s", ColorRed, msg, ColorReset)
 }
