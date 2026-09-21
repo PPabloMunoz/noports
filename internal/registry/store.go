@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"log"
 	"maps"
 	"sync"
 )
@@ -33,24 +34,25 @@ func (s *Store) List() map[string]Route {
 	return out
 }
 
-// Load save all the routes into Store without saving it into routes.json. This function SHOULD
+// FirstLoad save all the routes into Store without saving it into routes.json. This function SHOULD
 // ONLY be used on the intial load of the daemon process, it overwrite anything saved that has
 // the same key
-func (s *Store) Load(routes []Route) error {
+func (s *Store) FirstLoad(routes []Route) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, r := range routes {
 		hostname, err := NormalizeHostname(r.Hostname)
 		if err != nil {
-			return err
+			log.Printf("Could not load %v: %v\n", r, err)
+			continue
 		}
 		r.Hostname = hostname
 		if r.Port <= 0 {
-			return fmt.Errorf("port is required")
+			log.Printf("port is required. Route: %v\n", r)
+			continue
 		}
 		s.routes[r.Hostname] = r
 	}
-	return nil
 }
 
 // Add inserts a new route; it fails if the hostname already exists.

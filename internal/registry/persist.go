@@ -35,12 +35,7 @@ func Load(s *Store) error {
 		return fmt.Errorf("failed to unmarshal routes json: %w", err)
 	}
 
-	for _, r := range routes {
-		if err := s.Add(r); err != nil {
-			log.Printf("%v", err)
-		}
-	}
-
+	s.FirstLoad(routes)
 	return nil
 }
 
