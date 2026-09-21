@@ -70,6 +70,7 @@ func StartProxy() error {
 	if err != nil {
 		return fmt.Errorf("failed to create pipe: %w", err)
 	}
+	defer func() { _ = r.Close() }()
 
 	cmd := exec.Command(os.Args[0], "daemon")
 	cmd.ExtraFiles = []*os.File{w}
@@ -78,11 +79,27 @@ func StartProxy() error {
 	}
 	_ = w.Close()
 
-	buf := make([]byte, 1)
-	if _, err := r.Read(buf); err != nil {
-		return fmt.Errorf("failed to read from pipe: %w", err)
+	// Add timeout to reader
+	dataChan := make(chan byte, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		buf := make([]byte, 1)
+		if _, err := r.Read(buf); err != nil {
+			errChan <- fmt.Errorf("failed to read from pipe: %w", err)
+		}
+		dataChan <- '0'
+	}()
+
+	select {
+	case err := <-errChan:
+		return err
+	case <-dataChan:
+		break
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("timeout exceed. Could not read pipe for daemon readiness")
 	}
-	_ = r.Close()
+
 	return nil
 }
 
