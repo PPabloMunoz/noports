@@ -35,7 +35,26 @@ func Load(s *Store) error {
 		return fmt.Errorf("failed to unmarshal routes json: %w", err)
 	}
 
-	s.FirstLoad(routes)
+	// Clean routes
+	// Need to delete all routes, and kill processes, with a pid != -1.
+	// This should only run when starting daemon so there cannot be any running processes
+
+	validRoutes := []Route{}
+	for _, r := range routes {
+		if r.PID == -1 {
+			validRoutes = append(validRoutes, r)
+			continue
+		}
+
+		// Kill process if exist
+		p, err := os.FindProcess(r.PID)
+		if err != nil {
+			continue
+		}
+		_ = p.Signal(os.Kill)
+	}
+
+	s.FirstLoad(validRoutes)
 	return nil
 }
 
