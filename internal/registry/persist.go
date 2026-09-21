@@ -58,7 +58,7 @@ func Load(s *Store) error {
 	return nil
 }
 
-// Save persists all routes in s to routes.json atomically.
+// Save load all routes in store into routes.json file
 func Save(s *Store) error {
 	routesPath, err := paths.GetRoutesFilePath()
 	if err != nil {

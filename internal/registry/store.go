@@ -68,11 +68,11 @@ func (s *Store) Add(r Route) error {
 		return fmt.Errorf("port is required")
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if _, ok := s.routes[r.Hostname]; ok {
 		return fmt.Errorf("%s hostname already exists. Remove the previous first", r.Hostname)
 	}
 	s.routes[r.Hostname] = r
+	s.mu.Unlock()
 	return Save(s)
 }
 
@@ -99,7 +99,7 @@ func (s *Store) Remove(hostname string) error {
 		return err
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.routes, normalized)
+	s.mu.Unlock()
 	return Save(s)
 }
