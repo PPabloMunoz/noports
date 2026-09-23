@@ -3,17 +3,31 @@
 package pki
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 )
 
 func IsCATrusted() (bool, error) {
-	cmd := exec.Command("security", "find-certificate", "-c", CASubjectName)
-	if err := cmd.Run(); err != nil {
+	certPath, err := GetCACertPath()
+	if err != nil {
+		return false, err
+	}
+	caBytes, err := os.ReadFile(certPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	cmd := exec.Command("security", "find-certificate", "-c", CASubjectName, "-p")
+	out, err := cmd.Output()
+	if err != nil {
 		return false, nil
 	}
-	return true, nil
+	return bytes.Contains(out, bytes.TrimSpace(caBytes)), nil
 }
 
 func installCA() error {
