@@ -46,31 +46,17 @@ func PrintRoutesTable(routes []registry.Route) {
 	_ = w.Flush()
 }
 
+// IsDaemonRunning checks if a daemon process is running by checking
+// if can connect to the socket
 func IsDaemonRunning() (bool, error) {
-	pidFilePath, err := paths.GetPIDFilePath()
-	if err != nil {
-		return false, err
-	}
+	socketPath := paths.GetSocketPath()
 
-	pidBytes, err := os.ReadFile(pidFilePath)
-	if err != nil {
-		return false, nil
+	conn, err := net.Dial("unix", socketPath)
+	if err == nil {
+		_ = conn.Close()
+		return true, nil
 	}
-
-	pid, err := strconv.Atoi(string(pidBytes))
-	if err != nil {
-		return false, nil
-	}
-
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false, err
-	}
-
-	if err := p.Signal(syscall.Signal(0)); err != nil {
-		return false, nil
-	}
-	return true, nil
+	return false, nil
 }
 
 func StartProxy() error {
@@ -111,26 +97,47 @@ func StartProxy() error {
 	return nil
 }
 
+// StopProxy signals the daemon and waits until it has released the pidfile
+// and control socket. It uses the socket dial (same test as IsDaemonRunning
+// and ipc.Listen) to decide liveness, and only the pidfile to find the
+// process to signal.
 func StopProxy() error {
-	running, err := IsDaemonRunning()
-	if err != nil {
-		return err
-	}
-
-	if !running {
-		return nil
-	}
-
 	pidFilePath, err := paths.GetPIDFilePath()
 	if err != nil {
 		return err
 	}
-	pidBytes, err := os.ReadFile(pidFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", pidFilePath, err)
+	socketPath := paths.GetSocketPath()
+
+	pidBytes, readErr := os.ReadFile(pidFilePath)
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		return fmt.Errorf("failed to read %s: %w", pidFilePath, readErr)
+	}
+	pidExists := readErr == nil
+	running := socketAccepting(socketPath)
+
+	switch {
+	case !running && !pidExists:
+		// Already stopped and no leftovers to reap.
+		return nil
+	case !running:
+		// Socket dead but leftovers remain (e.g. kill -9): nothing to
+		// signal. Reap stale files so the next start finds clean state.
+		// The socket was just probed as not accepting, so it is safe to
+		// unlink (same rule waitForShutdown applies).
+		if err := os.Remove(pidFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	case !pidExists:
+		// Daemon is accepting on the socket but there is no pidfile to
+		// signal it with; do not guess a PID.
+		return fmt.Errorf("daemon is running at %s but %s is missing; cannot signal it", socketPath, pidFilePath)
 	}
 
-	pid, err := strconv.Atoi(string(pidBytes))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
 	if err != nil {
 		return fmt.Errorf("failed to convert daemon PID '%s' to int: %w", string(pidBytes), err)
 	}
@@ -140,6 +147,8 @@ func StopProxy() error {
 		return fmt.Errorf("failed to find proxy process: %w", err)
 	}
 
+	// A daemon that already exited (ErrProcessDone/ESRCH) is fine here:
+	// waitForShutdown detects unclean death and reaps stale files.
 	if err := p.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return fmt.Errorf("failed to signal proxy process: %w", err)
 	}
@@ -206,7 +215,7 @@ func fileGone(path string) bool {
 }
 
 // processAlive reports whether pid names a live process. Note signal 0 cannot
-// distinguish PID reuse (see IsDaemonRunning); callers treat file/socket state
+// distinguish PID reuse; callers treat file/socket state
 // as the primary evidence and liveness only as a fallback.
 func processAlive(pid int) bool {
 	p, err := os.FindProcess(pid)
