@@ -4,6 +4,7 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -18,10 +19,6 @@ var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean files and certificates from the device",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := client.StopProxy(); err != nil {
-			return err
-		}
-
 		var answer string
 		client.Info("This will remove all the routes registered and remove and uninstall all certs created.\n")
 		client.Warning("Do you want to continue [y/N]: ")
@@ -31,6 +28,11 @@ var cleanCmd = &cobra.Command{
 			return nil
 		}
 
+		if err := client.StopProxy(); err != nil {
+			return err
+		}
+		client.Info("proxy stopped\n")
+
 		if err := pki.UninstallCA(); err != nil {
 			return err
 		}
@@ -38,21 +40,45 @@ var cleanCmd = &cobra.Command{
 
 		certsDir, err := paths.GetCertsDirPath()
 		if err != nil {
-			return fmt.Errorf("failed to get certificates dir: %w", err)
+			return fmt.Errorf("failed to get certificates dir path: %w", err)
 		}
 		if err := os.RemoveAll(certsDir); err != nil {
-			return fmt.Errorf("failed to delete certificates dir: %w", err)
+			return fmt.Errorf("failed to remove %s: %w", certsDir, err)
 		}
-		client.Info("leaf certificates removed\n")
+		client.Info("certificates removed\n")
 
 		routesPath, err := paths.GetRoutesFilePath()
 		if err != nil {
 			return fmt.Errorf("failed to get routes file path: %w", err)
 		}
-		if err := os.Remove(routesPath); err != nil {
-			return fmt.Errorf("failed to delete %s: %w", routesPath, err)
+		if err := os.Remove(routesPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s: %w", routesPath, err)
 		}
 		client.Info("routes deleted\n")
+
+		// Delete log file
+		logFilePath, err := paths.GetLogFilePath()
+		if err != nil {
+			return fmt.Errorf("failed to get daemon log file path: %w", err)
+		}
+		if err := os.Remove(logFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s: %w", logFilePath, err)
+		}
+
+		// Delete .pid
+		pidPath, err := paths.GetPIDFilePath()
+		if err != nil {
+			return fmt.Errorf("failed to get pid file path: %w", err)
+		}
+		if err := os.Remove(pidPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s: %w", pidPath, err)
+		}
+
+		// Delete socket file
+		socketPath := paths.GetSocketPath()
+		if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s: %w", socketPath, err)
+		}
 
 		client.Success("clean completed\n")
 		return nil
