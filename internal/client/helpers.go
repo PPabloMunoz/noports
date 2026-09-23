@@ -202,20 +202,20 @@ func CleanUpCommand(command *exec.Cmd, name string, res *ipc.Response) error {
 
 func Success(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s", ColorGreen, msg, ColorReset)
+	fmt.Printf("%s[SUCCESS]%s %s", ColorGreen, ColorReset, msg)
 }
 
 func Info(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s", ColorBlue, msg, ColorReset)
+	fmt.Printf("%s[INFO]%s %s", ColorBlue, ColorReset, msg)
 }
 
 func Warning(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s", ColorYellow, msg, ColorReset)
+	fmt.Printf("%s[WARN]%s %s", ColorYellow, ColorReset, msg)
 }
 
 func Error(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s%s%s", ColorRed, msg, ColorReset)
+	fmt.Printf("%s[ERROR]%s %s", ColorRed, ColorReset, msg)
 }
