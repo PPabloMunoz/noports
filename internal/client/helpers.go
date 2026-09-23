@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -24,6 +25,13 @@ const (
 	ColorGreen  = "\033[32m"
 	ColorYellow = "\033[33m"
 	ColorBlue   = "\033[34m"
+)
+
+const (
+	// stopGracePeriod must exceed the daemon's own shutdown budget
+	// (10s in app.Run) so a slow but healthy shutdown still counts as stopped.
+	stopGracePeriod = 30 * time.Second
+	stopPollEvery   = 100 * time.Millisecond
 )
 
 func PrintRoutesTable(routes []registry.Route) {
@@ -132,11 +140,80 @@ func StopProxy() error {
 		return fmt.Errorf("failed to find proxy process: %w", err)
 	}
 
-	if err := p.Signal(os.Interrupt); err != nil {
-		return fmt.Errorf("failed to kill proxy process: %w", err)
+	if err := p.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("failed to signal proxy process: %w", err)
 	}
 
-	return nil
+	return waitForShutdown(pid)
+}
+
+// waitForShutdown blocks until the daemon has released everything a new
+// instance needs (pidfile + control socket), so a StartProxy right after
+// StopProxy cannot race the old instance's graceful shutdown. pid detects an
+// unclean death (e.g. kill -9): nothing will ever clean up then, so stale
+// files are reaped here instead.
+func waitForShutdown(pid int) error {
+	pidFilePath, err := paths.GetPIDFilePath()
+	if err != nil {
+		return err
+	}
+	socketPath := paths.GetSocketPath()
+
+	deadline := time.Now().Add(stopGracePeriod)
+	for {
+		if fileGone(pidFilePath) && !socketAccepting(socketPath) {
+			return nil
+		}
+
+		if !processAlive(pid) {
+			// The daemon died without cleaning up: remove stale leftovers so
+			// the next start finds a clean state.
+			if err := os.Remove(pidFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			// Re-probe and never unlink a socket another daemon is still
+			// accepting on.
+			if !socketAccepting(socketPath) {
+				if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+			}
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			logPath, _ := paths.GetLogFilePath()
+			return fmt.Errorf("timed out after %v waiting for daemon (pid %d) to stop; see %s", stopGracePeriod, pid, logPath)
+		}
+		time.Sleep(stopPollEvery)
+	}
+}
+
+// socketAccepting is the same test ipc.Listen uses to refuse a second daemon:
+// false means a new daemon is free to start (stale socket files included).
+func socketAccepting(socketPath string) bool {
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func fileGone(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, os.ErrNotExist)
+}
+
+// processAlive reports whether pid names a live process. Note signal 0 cannot
+// distinguish PID reuse (see IsDaemonRunning); callers treat file/socket state
+// as the primary evidence and liveness only as a fallback.
+func processAlive(pid int) bool {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return p.Signal(syscall.Signal(0)) == nil
 }
 
 func randomNum() int {
