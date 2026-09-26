@@ -14,16 +14,12 @@ const orphanSweepInterval = 30 * time.Second
 
 // sweepOrphans prunes run routes whose processes are gone and persists the result. Aliases are never touched; a dead wrapper frees the name even if the orphaned child still listens.
 func sweepOrphans(store *registry.Store) {
-	pruned := store.Prune(registry.RouteAlive)
-	if len(pruned) == 0 {
-		return
-	}
+	pruned, err := store.PruneAndPersist(registry.RouteAlive)
 	for _, r := range pruned {
 		invalidateCachedCert(r.Hostname)
 		proxy.InvalidateHost(r.Hostname)
-		log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
 	}
-	if err := store.Save(); err != nil {
+	if err != nil {
 		log.Printf("failed to persist pruned routes: %v", err)
 	}
 }

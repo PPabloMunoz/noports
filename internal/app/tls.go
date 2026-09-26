@@ -15,7 +15,7 @@ import (
 var (
 	// tlsCerts caches per-hostname leaf certs to avoid file I/O on every handshake. Values are read-only after parsing and safe for concurrent use.
 	tlsCerts sync.Map
-	// tlsLocks shards handshake-time cert creation per hostname so concurrent first handshakes share one issuance instead of racing.
+	// tlsLocks shards handshake-time cert creation per hostname so concurrent first handshakes share one issuance instead of racing. It guards the in-memory cache only; pki leaf file creation has its own per-hostname locks.
 	tlsLocks sync.Map
 )
 

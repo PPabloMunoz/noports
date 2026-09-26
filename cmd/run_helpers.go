@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -73,33 +71,16 @@ func launchChild(bin string, args []string, name, hostname string, port int, por
 }
 
 // registerRoute registers the child backend with the daemon. It records both start times so the orphan sweep can tell PID reuse apart, and interrupts the child on failure.
-func registerRoute(command *exec.Cmd, hostname string, port int) (net.Conn, *ipc.Response, error) {
-	conn, err := ipc.Dial()
-	if err != nil {
-		_ = command.Process.Signal(os.Interrupt)
-		return nil, nil, err
-	}
-
-	encoder := json.NewEncoder(conn)
-	decoder := json.NewDecoder(conn)
-
+func registerRoute(command *exec.Cmd, hostname string, port int) (*ipc.Response, error) {
 	wrapperPID := os.Getpid()
 	childStart, _ := registry.ProcessStartTime(command.Process.Pid)
 	wrapperStart, _ := registry.ProcessStartTime(wrapperPID)
-	req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: command.Process.Pid, WrapperPID: wrapperPID, ChildStartTime: childStart, WrapperStartTime: wrapperStart}
-	if err := client.Send(encoder, req); err != nil {
+	res, err := client.RoundTrip(&ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: command.Process.Pid, WrapperPID: wrapperPID, ChildStartTime: childStart, WrapperStartTime: wrapperStart})
+	if err != nil {
 		_ = command.Process.Signal(os.Interrupt)
-		_ = conn.Close()
-		return nil, nil, err
+		return nil, err
 	}
-
-	var res ipc.Response
-	if err := client.Receive(decoder, &res); err != nil {
-		_ = command.Process.Signal(os.Interrupt)
-		_ = conn.Close()
-		return nil, nil, err
-	}
-	return conn, &res, nil
+	return &res, nil
 }
 
 // waitForBackend waits up to waitDur for the backend to accept TCP. A non-positive duration skips waiting; a child exit or timeout interrupts the child and unregisters the route.

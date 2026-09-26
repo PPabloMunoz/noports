@@ -8,13 +8,11 @@ import (
 	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-// Listen creates the control socket listener, removing a stale socket file. It dials first to refuse starting a second daemon.
+// Listen creates the control socket listener, removing a stale socket file. It refuses to start when another daemon is already serving.
 func Listen() (net.Listener, error) {
 	socketPath := paths.Socket()
 
-	conn, err := net.Dial("unix", socketPath)
-	if err == nil {
-		_ = conn.Close()
+	if IsServing() {
 		return nil, fmt.Errorf("daemon already running at %s", socketPath)
 	}
 
@@ -33,4 +31,14 @@ func Listen() (net.Listener, error) {
 // Dial connects to the running daemon over the control socket. Callers must close the returned connection when done.
 func Dial() (net.Conn, error) {
 	return net.Dial("unix", paths.Socket())
+}
+
+// IsServing reports whether a daemon accepts control-socket connections. It dials and closes immediately without sending a request; false means a new daemon is free to start.
+func IsServing() bool {
+	conn, err := Dial()
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }

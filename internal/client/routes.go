@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,27 +12,13 @@ import (
 
 // ListRoutes queries the daemon over the control socket without starting it. Callers that want the daemon up first should call EnsureProxy beforehand.
 func ListRoutes() ([]registry.Route, error) {
-	conn, err := ipc.Dial()
+	res, err := RoundTrip(&ipc.Request{Command: ipc.CmdList})
 	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = conn.Close() }()
-
-	encoder := json.NewEncoder(conn)
-	decoder := json.NewDecoder(conn)
-
-	req := &ipc.Request{Command: ipc.CmdList}
-	if err := Send(encoder, req); err != nil {
-		return nil, err
-	}
-
-	var res ipc.Response
-	if err := Receive(decoder, &res); err != nil {
 		return nil, err
 	}
 
 	var data ipc.DataResponseList
-	if err := DecodeListResponse(&res.Data, &data); err != nil {
+	if err := DecodeData(&res.Data, &data); err != nil {
 		return nil, err
 	}
 
@@ -58,24 +43,13 @@ func PrintRoutesTable(routes []registry.Route) {
 	_ = w.Flush()
 }
 
-// RemoveRunRoute unregisters the run route for name when the child exits. It dials the daemon and sends an alias-remove request.
+// RemoveRunRoute unregisters the run route for name when the child exits. It sends an alias-remove request and stores the daemon reply in res.
 func RemoveRunRoute(command *exec.Cmd, name string, res *ipc.Response) error {
-	conn, err := ipc.Dial()
+	resp, err := RoundTrip(&ipc.Request{Command: ipc.CmdAliasRemove, Hostname: name})
 	if err != nil {
 		_ = command.Process.Signal(os.Interrupt)
 		return err
 	}
-	defer func() { _ = conn.Close() }()
-
-	encoder := json.NewEncoder(conn)
-	decoder := json.NewDecoder(conn)
-
-	req := &ipc.Request{Command: ipc.CmdAliasRemove, Hostname: name}
-	if err := Send(encoder, req); err != nil {
-		return err
-	}
-	if err := Receive(decoder, res); err != nil {
-		return err
-	}
+	*res = resp
 	return nil
 }

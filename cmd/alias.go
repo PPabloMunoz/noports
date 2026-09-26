@@ -4,7 +4,6 @@ Copyright © 2026 Pablo Muñoz
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -37,23 +36,8 @@ var aliasCmd = &cobra.Command{
 			return err
 		}
 
-		conn, err := ipc.Dial()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = conn.Close() }()
-
-		encoder := json.NewEncoder(conn)
-		decoder := json.NewDecoder(conn)
-
 		if cmd.Flags().Changed("remove") {
-			req := &ipc.Request{Command: ipc.CmdAliasRemove, Hostname: hostname}
-			if err := client.Send(encoder, req); err != nil {
-				return err
-			}
-
-			var res ipc.Response
-			if err := client.Receive(decoder, &res); err != nil {
+			if _, err := client.RoundTrip(&ipc.Request{Command: ipc.CmdAliasRemove, Hostname: hostname}); err != nil {
 				return err
 			}
 
@@ -65,13 +49,7 @@ var aliasCmd = &cobra.Command{
 			return fmt.Errorf("invalid port")
 		}
 
-		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: -1, WrapperPID: -1}
-		if err := client.Send(encoder, req); err != nil {
-			return err
-		}
-
-		var res ipc.Response
-		if err := client.Receive(decoder, &res); err != nil {
+		if _, err := client.RoundTrip(&ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: -1, WrapperPID: -1}); err != nil {
 			return err
 		}
 

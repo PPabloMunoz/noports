@@ -17,7 +17,7 @@ import (
 	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-// leafLocks serializes leaf creation per hostname so concurrent first uses of the same name share one issuance instead of racing on the Exists check and file writes.
+// leafLocks serializes leaf creation per hostname so concurrent first uses of the same name share one issuance instead of racing on the Exists check and file writes. It guards cert files on disk only; the daemon handshake cache in app has its own per-hostname locks.
 var leafLocks sync.Map // hostname -> *sync.Mutex
 
 func leafLockFor(hostname string) *sync.Mutex {

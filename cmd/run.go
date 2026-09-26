@@ -45,11 +45,10 @@ var runCmd = &cobra.Command{
 			return err
 		}
 
-		conn, res, err := registerRoute(command, hostname, port)
+		res, err := registerRoute(command, hostname, port)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = conn.Close() }()
 
 		waitCh := make(chan error, 1)
 		go func() {

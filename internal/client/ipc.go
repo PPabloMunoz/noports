@@ -26,21 +26,26 @@ func Receive(decoder *json.Decoder, res *ipc.Response) error {
 	return nil
 }
 
-// DecodeListResponse converts the generic response payload into a route list. It round-trips through JSON so daemon and CLI can evolve independently.
-func DecodeListResponse(resData any, result *ipc.DataResponseList) error {
-	dataResBytes, err := json.Marshal(resData)
+// RoundTrip sends one control request to the daemon and returns its response. It dials, encodes, decodes, and closes the connection.
+func RoundTrip(req *ipc.Request) (ipc.Response, error) {
+	var res ipc.Response
+	conn, err := ipc.Dial()
 	if err != nil {
-		return fmt.Errorf("failed to marshal data response: %w", err)
+		return res, err
 	}
+	defer func() { _ = conn.Close() }()
 
-	if err := json.Unmarshal(dataResBytes, &result); err != nil {
-		return fmt.Errorf("failed to unmarshal %s: %w", string(dataResBytes), err)
+	if err := Send(json.NewEncoder(conn), req); err != nil {
+		return res, err
 	}
-	return nil
+	if err := Receive(json.NewDecoder(conn), &res); err != nil {
+		return res, err
+	}
+	return res, nil
 }
 
-// DecodeGetResponse converts the generic response payload into a single route. It round-trips through JSON so daemon and CLI can evolve independently.
-func DecodeGetResponse(resData any, result *ipc.DataResponseGet) error {
+// DecodeData converts a generic response payload into the caller's target type. It round-trips through JSON so daemon and CLI can evolve independently.
+func DecodeData[T any](resData any, result *T) error {
 	dataResBytes, err := json.Marshal(resData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data response: %w", err)

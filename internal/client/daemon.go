@@ -3,13 +3,13 @@ package client
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ppablomunoz/noports/internal/ipc"
 	"github.com/ppablomunoz/noports/internal/paths"
 	"github.com/ppablomunoz/noports/internal/registry"
 )
@@ -21,16 +21,9 @@ const (
 	stopPollEvery   = 100 * time.Millisecond
 )
 
-// IsDaemonRunning reports whether the daemon accepts control-socket connections. It dials the socket and closes immediately without sending a request.
+// IsDaemonRunning reports whether the daemon accepts control-socket connections. It delegates to ipc.IsServing and never returns an error; the error result exists for call-site uniformity.
 func IsDaemonRunning() (bool, error) {
-	socketPath := paths.Socket()
-
-	conn, err := net.Dial("unix", socketPath)
-	if err == nil {
-		_ = conn.Close()
-		return true, nil
-	}
-	return false, nil
+	return ipc.IsServing(), nil
 }
 
 // StartDaemon launches the daemon subprocess and waits for readiness. It passes a pipe as fd 3 so the child signals once the control socket is listening.
@@ -85,7 +78,7 @@ func StopDaemon() error {
 		return fmt.Errorf("failed to read %s: %w", pidFilePath, readErr)
 	}
 	pidExists := readErr == nil
-	running := socketAccepting(socketPath)
+	running := ipc.IsServing()
 
 	switch {
 	case !running && !pidExists:
@@ -142,11 +135,11 @@ func waitForShutdown(pid int) error {
 
 	deadline := time.Now().Add(stopGracePeriod)
 	for {
-		if fileGone(pidFilePath) && !socketAccepting(socketPath) {
+		if !paths.Exists(pidFilePath) && !ipc.IsServing() {
 			return nil
 		}
 
-		if !pidAlive(pid) {
+		if !registry.ProcessAlive(pid) {
 			// The daemon died without cleaning up: remove stale leftovers so
 			// the next start finds a clean state.
 			if err := os.Remove(pidFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -154,7 +147,7 @@ func waitForShutdown(pid int) error {
 			}
 			// Re-probe and never unlink a socket another daemon is still
 			// accepting on.
-			if !socketAccepting(socketPath) {
+			if !ipc.IsServing() {
 				if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 					return err
 				}
@@ -168,27 +161,4 @@ func waitForShutdown(pid int) error {
 		}
 		time.Sleep(stopPollEvery)
 	}
-}
-
-// socketAccepting is the same test ipc.Listen uses to refuse a second daemon:
-// false means a new daemon is free to start (stale socket files included).
-func socketAccepting(socketPath string) bool {
-	conn, err := net.Dial("unix", socketPath)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
-}
-
-func fileGone(path string) bool {
-	_, err := os.Stat(path)
-	return errors.Is(err, os.ErrNotExist)
-}
-
-// pidAlive reports whether pid names a live process. Note signal 0 cannot
-// distinguish PID reuse; callers treat file/socket state
-// as the primary evidence and liveness only as a fallback.
-func pidAlive(pid int) bool {
-	return registry.ProcessAlive(pid)
 }

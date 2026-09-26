@@ -28,27 +28,13 @@ var getCmd = &cobra.Command{
 			return err
 		}
 
-		conn, err := ipc.Dial()
+		res, err := client.RoundTrip(&ipc.Request{Command: ipc.CmdGet, Hostname: hostname})
 		if err != nil {
-			return err
-		}
-		defer func() { _ = conn.Close() }()
-
-		encoder := json.NewEncoder(conn)
-		decoder := json.NewDecoder(conn)
-
-		req := &ipc.Request{Command: ipc.CmdGet, Hostname: hostname}
-		if err := client.Send(encoder, req); err != nil {
-			return err
-		}
-
-		var res ipc.Response
-		if err := client.Receive(decoder, &res); err != nil {
 			return err
 		}
 
 		var data ipc.DataResponseGet
-		if err := client.DecodeGetResponse(&res.Data, &data); err != nil {
+		if err := client.DecodeData(&res.Data, &data); err != nil {
 			return err
 		}
 
