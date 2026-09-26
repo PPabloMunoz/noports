@@ -41,8 +41,8 @@ var cleanCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to get certificates dir path: %w", err)
 		}
-		if err := os.RemoveAll(certsDir); err != nil {
-			return fmt.Errorf("failed to remove %s: %w", certsDir, err)
+		if err := removeAllPath(certsDir); err != nil {
+			return err
 		}
 		client.Info("certificates removed\n")
 
@@ -50,33 +50,29 @@ var cleanCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to get routes file path: %w", err)
 		}
-		if err := os.Remove(routesPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("failed to remove %s: %w", routesPath, err)
+		if err := removePath(routesPath); err != nil {
+			return err
 		}
 		client.Info("routes deleted\n")
 
-		// Delete log file
 		logFilePath, err := paths.LogFile()
 		if err != nil {
 			return fmt.Errorf("failed to get daemon log file path: %w", err)
 		}
-		if err := os.Remove(logFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("failed to remove %s: %w", logFilePath, err)
+		if err := removePath(logFilePath); err != nil {
+			return err
 		}
 
-		// Delete .pid
 		pidPath, err := paths.PIDFile()
 		if err != nil {
 			return fmt.Errorf("failed to get pid file path: %w", err)
 		}
-		if err := os.Remove(pidPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("failed to remove %s: %w", pidPath, err)
+		if err := removePath(pidPath); err != nil {
+			return err
 		}
 
-		// Delete socket file
-		socketPath := paths.Socket()
-		if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("failed to remove %s: %w", socketPath, err)
+		if err := removePath(paths.Socket()); err != nil {
+			return err
 		}
 
 		client.Success("clean completed\n")
@@ -86,4 +82,20 @@ var cleanCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(cleanCmd)
+}
+
+// removePath removes a single file, ignoring missing files. It wraps failures with the path for CLI reporting.
+func removePath(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove %s: %w", path, err)
+	}
+	return nil
+}
+
+// removeAllPath removes a directory tree, succeeding when the path is already missing. It wraps failures with the path for CLI reporting.
+func removeAllPath(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to remove %s: %w", path, err)
+	}
+	return nil
 }

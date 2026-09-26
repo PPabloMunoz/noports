@@ -11,7 +11,7 @@ import (
 )
 
 // Load reads routes.json into s, creating the file when missing. It also prunes orphaned run routes left by crashed wrappers and persists the result.
-func Load(s *Store) error {
+func (s *Store) Load() error {
 	routesPath, err := paths.RoutesFile()
 	if err != nil {
 		return fmt.Errorf("failed to get routes json file path: %w", err)
@@ -44,7 +44,7 @@ func Load(s *Store) error {
 		for _, r := range pruned {
 			log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
 		}
-		if err := Save(s); err != nil {
+		if err := s.Save(); err != nil {
 			return fmt.Errorf("failed to persist pruned routes: %w", err)
 		}
 	}
@@ -52,7 +52,7 @@ func Load(s *Store) error {
 }
 
 // Save writes all in-memory routes to routes.json atomically. It marshals the current table and replaces the file via a temporary file and rename.
-func Save(s *Store) error {
+func (s *Store) Save() error {
 	routesPath, err := paths.RoutesFile()
 	if err != nil {
 		return fmt.Errorf("failed to get routes json file path: %w", err)

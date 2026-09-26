@@ -81,7 +81,7 @@ func (s *Store) Add(r Route) error {
 	}
 	s.routes[r.Hostname] = r
 	s.mu.Unlock()
-	return Save(s)
+	return s.Save()
 }
 
 // Get returns the route for hostname (bare name or "name.localhost", any case).
@@ -109,7 +109,7 @@ func (s *Store) Remove(hostname string) error {
 	s.mu.Lock()
 	delete(s.routes, normalized)
 	s.mu.Unlock()
-	return Save(s)
+	return s.Save()
 }
 
 // Prune removes orphaned run routes whose processes are gone per isAlive. Aliases are never pruned, probing runs lock-free on a snapshot, and deletion is compare-and-delete so re-added routes survive.
