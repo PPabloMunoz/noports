@@ -1,5 +1,5 @@
 /*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
+Copyright © 2026 Pablo Muñoz
 */
 package cmd
 
@@ -17,7 +17,7 @@ import (
 var getCmd = &cobra.Command{
 	Use:   "get <name>",
 	Args:  cobra.ExactArgs(1),
-	Short: "Get the data the route with name",
+	Short: "Show details of a route",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		hostname, err := registry.NormalizeHostname(args[0])
 		if err != nil {

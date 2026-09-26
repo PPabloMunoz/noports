@@ -1,5 +1,5 @@
 /*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
+Copyright © 2026 Pablo Muñoz
 */
 package cmd
 
@@ -17,7 +17,7 @@ import (
 // aliasCmd represents the alias command
 var aliasCmd = &cobra.Command{
 	Use:   "alias",
-	Short: "A brief description of your command",
+	Short: "Point a .localhost hostname at a local port",
 	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		hostname, err := registry.NormalizeHostname(args[0])
