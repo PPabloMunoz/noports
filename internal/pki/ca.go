@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/ppablomunoz/noports/internal/paths"
@@ -96,8 +97,15 @@ func removeLeafCerts() error {
 	return nil
 }
 
-func generateCA() error {
-	certPath, err := GetCACertPath()
+// caCache holds the parsed CA pair so leaf issuance doesn't re-read PEM
+// files from disk on every call. Reset on rotation (see generateCA).
+var (
+	caCacheMu   sync.RWMutex
+	caCacheCert *x509.Certificate
+	caCacheKey  *ecdsa.PrivateKey
+)
+
+func generateCA() error {	certPath, err := GetCACertPath()
 	if err != nil {
 		return fmt.Errorf("failed to get CA cert path: %w", err)
 	}
@@ -155,10 +163,23 @@ func generateCA() error {
 		return err
 	}
 
+	// New files on disk: drop the cached pair so the next loadCA re-reads.
+	caCacheMu.Lock()
+	caCacheCert = nil
+	caCacheKey = nil
+	caCacheMu.Unlock()
+
 	return nil
 }
 
 func loadCA() (*x509.Certificate, *ecdsa.PrivateKey, error) {
+	caCacheMu.RLock()
+	if caCacheCert != nil && caCacheKey != nil {
+		cert, key := caCacheCert, caCacheKey
+		caCacheMu.RUnlock()
+		return cert, key, nil
+	}
+	caCacheMu.RUnlock()
 	certPath, err := GetCACertPath()
 	if err != nil {
 		return nil, nil, err
@@ -202,6 +223,11 @@ func loadCA() (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	if !ok {
 		return nil, nil, fmt.Errorf("CA key is not an ECDSA private key (got %T)", keyAny)
 	}
+
+	caCacheMu.Lock()
+	caCacheCert = cert
+	caCacheKey = key
+	caCacheMu.Unlock()
 
 	return cert, key, nil
 }

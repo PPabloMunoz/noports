@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -73,6 +74,16 @@ func loadCachedCert(key string) (*tls.Certificate, bool) {
 // invalidateCachedCert drops key from the cache.
 func invalidateCachedCert(key string) {
 	tlsCerts.Delete(key)
+}
+
+// invalidateAllCerts drops every cached leaf cert. Used when the CA file
+// changes (rotation in another process) since old leafs are no longer
+// verifiable; they are re-issued on demand.
+func invalidateAllCerts() {
+	tlsCerts.Range(func(k, _ any) bool {
+		tlsCerts.Delete(k)
+		return true
+	})
 }
 
 // Run starts the daemon: dirs/PID, CA, routes, HTTP(S) servers and IPC socket.
@@ -142,6 +153,16 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
+	// Track the CA file modtime so a rotation performed by another process
+	// (CLI EnsureCA) drops stale cached leafs instead of serving them.
+	var caModUnix atomic.Int64
+	caModUnix.Store(-1)
+	if caPath, err := pki.GetCACertPath(); err == nil {
+		if st, err := os.Stat(caPath); err == nil {
+			caModUnix.Store(st.ModTime().UnixNano())
+		}
+	}
+
 	lookup := func(host string) (int, bool) {
 		route, err := store.Get(host)
 		if err != nil {
@@ -150,6 +171,21 @@ func Run(ctx context.Context, cfg Config) error {
 		return route.Port, true
 	}
 	dashboard := buildDashboardHandler(cfg.DashboardTemplate, store)
+	checkCARotation := func() {
+		caPath, err := pki.GetCACertPath()
+		if err != nil {
+			return
+		}
+		st, err := os.Stat(caPath)
+		if err != nil {
+			return
+		}
+		if mt := st.ModTime().UnixNano(); caModUnix.CompareAndSwap(caModUnix.Load(), mt) {
+			// Modtime changed since last handshake: old leafs were signed
+			// by the previous CA. Drop them; slow path re-issues.
+			invalidateAllCerts()
+		}
+	}
 	getCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		host := strings.ToLower(strings.TrimSpace(hello.ServerName))
 		if host == "" {
@@ -159,37 +195,48 @@ func Run(ctx context.Context, cfg Config) error {
 			return serverCert, nil
 		}
 
+		// Single normalization for the whole handshake.
 		key, err := registry.NormalizeHostname(host)
 		if err != nil {
 			return nil, err
 		}
 
-		// Fast path: serve from cache, but verify the route still
-		// exists so removed/pruned names stop serving a stale cert.
+		checkCARotation()
+
+		// Single route lookup on the fast path: a missing route also
+		// evicts any stale cached cert for the name.
+		route, err := store.Get(key)
+		if err != nil {
+			invalidateCachedCert(key)
+			return nil, fmt.Errorf("%s is not registered", host)
+		}
+
+		// Fast path: cached + fresh (beyond the 30d renewal window).
 		if cert, ok := loadCachedCert(key); ok {
-			if _, err := store.Get(key); err != nil {
-				invalidateCachedCert(key)
-			} else {
+			if pki.CertFresh(cert) {
 				return cert, nil
 			}
+			invalidateCachedCert(key)
 		}
 
 		// Slow path: serialize creation per hostname, then re-check
 		// so concurrent first handshakes share one result.
 		mu := certLockFor(key)
 		mu.Lock()
-		defer mu.Unlock()
+		defer func() {
+			mu.Unlock()
+			tlsLocks.Delete(key)
+		}()
 
-		if cert, ok := loadCachedCert(key); ok {
-			if _, err := store.Get(key); err != nil {
-				invalidateCachedCert(key)
-			} else {
-				return cert, nil
-			}
+		if cert, ok := loadCachedCert(key); ok && pki.CertFresh(cert) {
+			return cert, nil
 		}
 
-		route, err := store.Get(key)
+		// Revalidate under lock: the route may have been removed while
+		// waiting. Second and last lookup on this path.
+		route, err = store.Get(key)
 		if err != nil {
+			invalidateCachedCert(key)
 			return nil, fmt.Errorf("%s is not registered", host)
 		}
 		cert, err := pki.GetLeafTLSCertificate(route.Hostname)
@@ -211,6 +258,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	log.Printf("Socket listening on %s\n", paths.GetSocketPath())
 
+	onRemove := func(hostname string) {
+		invalidateCachedCert(hostname)
+		proxy.Invalidate(hostname)
+	}
+
 	if readyPipe != nil {
 		if _, err := readyPipe.Write([]byte{1}); err != nil {
 			log.Println("no readiness pipe (likely a manual/foreground run)")
@@ -228,7 +280,7 @@ func Run(ctx context.Context, cfg Config) error {
 				log.Printf("failed to accept connection to socket: %v", err)
 				continue
 			}
-			go ipc.HandleConnection(conn, store, invalidateCachedCert)
+			go ipc.HandleConnection(conn, store, onRemove)
 		}
 	}()
 
@@ -251,6 +303,7 @@ func Run(ctx context.Context, cfg Config) error {
 				}
 				for _, r := range pruned {
 					invalidateCachedCert(r.Hostname)
+					proxy.Invalidate(r.Hostname)
 					log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
 				}
 				if err := registry.Save(store); err != nil {

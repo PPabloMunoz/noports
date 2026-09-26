@@ -2,6 +2,7 @@ package pki
 
 import (
 	"crypto/ecdsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -80,8 +81,7 @@ func writeCertAndKey(certPath, keyPath string, derBytes []byte, key *ecdsa.Priva
 }
 
 // certNotAfter returns the NotAfter of the PEM-encoded certificate at certPath.
-func certNotAfter(certPath string) (time.Time, error) {
-	certBytes, err := os.ReadFile(certPath)
+func certNotAfter(certPath string) (time.Time, error) {	certBytes, err := os.ReadFile(certPath)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -94,4 +94,14 @@ func certNotAfter(certPath string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return cert.NotAfter, nil
+}
+
+// CertFresh reports whether a loaded TLS cert stays valid beyond the leaf
+// renewal window. Certs without a parsed Leaf are treated as stale so the
+// caller reloads from disk.
+func CertFresh(cert *tls.Certificate) bool {
+	if cert == nil || cert.Leaf == nil {
+		return false
+	}
+	return time.Now().Add(leafRenewBeforeExpiry).Before(cert.Leaf.NotAfter)
 }

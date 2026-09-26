@@ -7,11 +7,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -107,7 +105,10 @@ func GetLeafCertificatePaths(hostname string) (string, string, error) {
 
 	mu := leafLockFor(hostname)
 	mu.Lock()
-	defer mu.Unlock()
+	defer func() {
+		mu.Unlock()
+		leafLocks.Delete(hostname)
+	}()
 
 	// Re-check under lock: a concurrent caller may have created it.
 	if leafCertValid(leafCertPath, leafKeyPath) {
@@ -144,32 +145,14 @@ func GetLeafTLSCertificate(hostname string) (*tls.Certificate, error) {
 		return nil, err
 	}
 
-	certBytes, err := os.ReadFile(leafCertPath)
+	tlsCert, err := tls.LoadX509KeyPair(leafCertPath, leafKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", leafCertPath, err)
+		return nil, fmt.Errorf("failed to load TLS key pair for %s: %w", hostname, err)
 	}
-
-	certDecoded, _ := pem.Decode(certBytes)
-	if certDecoded == nil {
-		return nil, fmt.Errorf("failed to decode leaf cert for %s", hostname)
-	}
-
-	keyBytes, err := os.ReadFile(leafKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", leafKeyPath, err)
-	}
-
-	keyDecoded, _ := pem.Decode(keyBytes)
-	if keyDecoded == nil {
-		return nil, fmt.Errorf("failed to decode leaf key for %s", hostname)
-	}
-
-	tlsCert, err := tls.X509KeyPair(
-		pem.EncodeToMemory(certDecoded),
-		pem.EncodeToMemory(keyDecoded),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse TLS key pair: %w", err)
+	if len(tlsCert.Certificate) > 0 {
+		if leaf, err := x509.ParseCertificate(tlsCert.Certificate[0]); err == nil {
+			tlsCert.Leaf = leaf
+		}
 	}
 
 	return &tlsCert, nil

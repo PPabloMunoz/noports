@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"time"
 )
 
 // DefaultRedirectAddr and DefaultProxyAddr preserve current behavior.
@@ -18,7 +19,12 @@ func StartRedirectServer(addr string, errCh chan<- error) *http.Server {
 		addr = DefaultRedirectAddr
 	}
 	srv := &http.Server{
-		Addr: addr,
+		Addr:              addr,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			host := stripPort(r.Host)
 			target := "https://" + host + r.URL.RequestURI()
