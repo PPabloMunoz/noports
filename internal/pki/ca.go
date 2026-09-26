@@ -1,8 +1,9 @@
 package pki
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ppablomunoz/noports/internal/paths"
@@ -30,8 +32,13 @@ func EnsureCA() error {
 		return fmt.Errorf("failed to get CA key path: %w", err)
 	}
 
-	if !paths.Exists(certPath) || !paths.Exists(keyPath) {
+	if needsCARotation(certPath, keyPath) {
+		fmt.Println("CA certificate missing, expired, or near expiry — rotating")
 		if err := generateCA(); err != nil {
+			return err
+		}
+		// Leafs were signed by the old CA; drop them so they are re-issued on demand.
+		if err := removeLeafCerts(); err != nil {
 			return err
 		}
 	}
@@ -49,6 +56,46 @@ func EnsureCA() error {
 	return nil
 }
 
+// needsCARotation reports whether the CA must be (re)generated: files
+// missing, cert corrupt, expired, or inside the renewal window.
+func needsCARotation(certPath, keyPath string) bool {
+	if !paths.Exists(certPath) || !paths.Exists(keyPath) {
+		return true
+	}
+	notAfter, err := certNotAfter(certPath)
+	if err != nil {
+		return true
+	}
+	return !time.Now().Add(caRenewBeforeExpiry).Before(notAfter)
+}
+
+// removeLeafCerts deletes every *.pem in the certs dir except the CA pair.
+// Called after CA rotation since old leafs are no longer verifiable;
+// they are re-issued on demand by GetLeafCertificatePaths.
+func removeLeafCerts() error {
+	dir, err := paths.GetCertsDirPath()
+	if err != nil {
+		return fmt.Errorf("failed to get certificates dir: %w", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to list certificates dir: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == CACertFile || name == CAKeyFile || filepath.Ext(name) != ".pem" {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove stale leaf %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func generateCA() error {
 	certPath, err := GetCACertPath()
 	if err != nil {
@@ -59,7 +106,7 @@ func generateCA() error {
 		return fmt.Errorf("failed to get CA key path: %w", err)
 	}
 
-	caKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return fmt.Errorf("failed to generate CA key: %w", err)
 	}
@@ -70,7 +117,10 @@ func generateCA() error {
 		return fmt.Errorf("failed to create random serial number for CA: %w", err)
 	}
 
-	pubBytes := x509.MarshalPKCS1PublicKey(&caKey.PublicKey)
+	pubBytes, err := x509.MarshalPKIXPublicKey(&caKey.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal CA public key: %w", err)
+	}
 	skid := sha1.Sum(pubBytes)
 
 	now := time.Now()
@@ -108,7 +158,7 @@ func generateCA() error {
 	return nil
 }
 
-func loadCA() (*x509.Certificate, *rsa.PrivateKey, error) {
+func loadCA() (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	certPath, err := GetCACertPath()
 	if err != nil {
 		return nil, nil, err
@@ -148,9 +198,9 @@ func loadCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	key, ok := keyAny.(*rsa.PrivateKey)
+	key, ok := keyAny.(*ecdsa.PrivateKey)
 	if !ok {
-		return nil, nil, fmt.Errorf("CA key is not an RSA private key")
+		return nil, nil, fmt.Errorf("CA key is not an ECDSA private key (got %T)", keyAny)
 	}
 
 	return cert, key, nil

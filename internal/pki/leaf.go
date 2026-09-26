@@ -1,8 +1,9 @@
 package pki
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -47,7 +48,7 @@ func createLeafCertificate(hostname string) error {
 		return err
 	}
 
-	leafKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return fmt.Errorf("failed to generate leaf key: %w", err)
 	}
@@ -67,7 +68,7 @@ func createLeafCertificate(hostname string) error {
 		},
 		NotBefore:   now,
 		NotAfter:    now.AddDate(0, 3, 0), // 3 months
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:    []string{"localhost", hostname},
 		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
@@ -92,14 +93,15 @@ func createLeafCertificate(hostname string) error {
 	return nil
 }
 
-// GetLeafCertificatePaths ensures a leaf cert exists for hostname and returns its paths.
+// GetLeafCertificatePaths ensures a valid leaf cert exists for hostname and returns its paths.
+// Expired, near-expiry (<30d left), corrupt, or missing certs are regenerated.
 func GetLeafCertificatePaths(hostname string) (string, string, error) {
 	leafCertPath, leafKeyPath, err := getLeafCertPaths(hostname)
 	if err != nil {
 		return "", "", err
 	}
 
-	if paths.Exists(leafCertPath) && paths.Exists(leafKeyPath) {
+	if leafCertValid(leafCertPath, leafKeyPath) {
 		return leafCertPath, leafKeyPath, nil
 	}
 
@@ -108,15 +110,31 @@ func GetLeafCertificatePaths(hostname string) (string, string, error) {
 	defer mu.Unlock()
 
 	// Re-check under lock: a concurrent caller may have created it.
-	if paths.Exists(leafCertPath) && paths.Exists(leafKeyPath) {
+	if leafCertValid(leafCertPath, leafKeyPath) {
 		return leafCertPath, leafKeyPath, nil
 	}
 
+	if paths.Exists(leafCertPath) {
+		fmt.Printf("renewing leaf certificate for %s (expired or near expiry)\n", hostname)
+	}
 	if err := createLeafCertificate(hostname); err != nil {
 		return "", "", err
 	}
 
 	return leafCertPath, leafKeyPath, nil
+}
+
+// leafCertValid reports whether both files exist and the cert stays valid
+// beyond the renewal window. Anything else means regenerate.
+func leafCertValid(leafCertPath, leafKeyPath string) bool {
+	if !paths.Exists(leafCertPath) || !paths.Exists(leafKeyPath) {
+		return false
+	}
+	notAfter, err := certNotAfter(leafCertPath)
+	if err != nil {
+		return false
+	}
+	return time.Now().Add(leafRenewBeforeExpiry).Before(notAfter)
 }
 
 // GetLeafTLSCertificate loads (creating if needed) the TLS cert for hostname.
