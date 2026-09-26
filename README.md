@@ -25,7 +25,7 @@ and open `https://api.localhost`.
 
 ## Requirements
 
-- Go 1.27.1+ (to build from source)
+- Go 1.24+ (to build from source)
 - macOS or Linux
 - Permission to bind `:80`/`:443` and to install a local CA (one-time `trust`, may prompt for sudo)
 

@@ -1,6 +1,6 @@
 module github.com/ppablomunoz/noports
 
-go 1.27.1
+go 1.24
 
 require github.com/spf13/cobra v1.10.2
 
