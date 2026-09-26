@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -35,6 +36,44 @@ type Config struct {
 // orphanSweepInterval is how often the daemon reaps `run` routes whose
 // wrapper or child died without unregistering.
 const orphanSweepInterval = 30 * time.Second
+
+var (
+	// tlsCerts caches per-hostname leaf certs to avoid file I/O + PEM
+	// parse on every handshake. Keys are normalized hostnames
+	// (see registry.NormalizeHostname). Values are *tls.Certificate,
+	// which is read-only after parsing and safe for concurrent use.
+	tlsCerts sync.Map
+	// tlsLocks shards handshake-time cert creation per hostname so
+	// concurrent first handshakes for the same name share one
+	// GetLeafTLSCertificate call instead of racing in
+	// createLeafCertificate. One entry per hostname; bounded.
+	tlsLocks sync.Map
+)
+
+// certLockFor returns the per-hostname mutex for key, creating it on first use.
+func certLockFor(key string) *sync.Mutex {
+	mu, _ := tlsLocks.LoadOrStore(key, &sync.Mutex{})
+	return mu.(*sync.Mutex)
+}
+
+// loadCachedCert returns the cached cert for key, evicting poisoned entries.
+func loadCachedCert(key string) (*tls.Certificate, bool) {
+	v, ok := tlsCerts.Load(key)
+	if !ok {
+		return nil, false
+	}
+	cert, ok := v.(*tls.Certificate)
+	if !ok || cert == nil {
+		tlsCerts.Delete(key)
+		return nil, false
+	}
+	return cert, true
+}
+
+// invalidateCachedCert drops key from the cache.
+func invalidateCachedCert(key string) {
+	tlsCerts.Delete(key)
+}
 
 // Run starts the daemon: dirs/PID, CA, routes, HTTP(S) servers and IPC socket.
 // It blocks until ctx is cancelled, a shutdown signal arrives, or a server fails.
@@ -97,6 +136,12 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
+	// Preload once so the localhost handshake path does no file I/O.
+	serverCert, err := pki.GetLeafTLSCertificate("server")
+	if err != nil {
+		return err
+	}
+
 	lookup := func(host string) (int, bool) {
 		route, err := store.Get(host)
 		if err != nil {
@@ -106,18 +151,53 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	dashboard := buildDashboardHandler(cfg.DashboardTemplate, store)
 	getCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		host := strings.ToLower(hello.ServerName)
+		host := strings.ToLower(strings.TrimSpace(hello.ServerName))
 		if host == "" {
 			return nil, fmt.Errorf("no SNI provided, cannot select certificate")
 		}
 		if host == "localhost" {
-			return pki.GetLeafTLSCertificate("server")
+			return serverCert, nil
 		}
-		route, err := store.Get(host)
+
+		key, err := registry.NormalizeHostname(host)
+		if err != nil {
+			return nil, err
+		}
+
+		// Fast path: serve from cache, but verify the route still
+		// exists so removed/pruned names stop serving a stale cert.
+		if cert, ok := loadCachedCert(key); ok {
+			if _, err := store.Get(key); err != nil {
+				invalidateCachedCert(key)
+			} else {
+				return cert, nil
+			}
+		}
+
+		// Slow path: serialize creation per hostname, then re-check
+		// so concurrent first handshakes share one result.
+		mu := certLockFor(key)
+		mu.Lock()
+		defer mu.Unlock()
+
+		if cert, ok := loadCachedCert(key); ok {
+			if _, err := store.Get(key); err != nil {
+				invalidateCachedCert(key)
+			} else {
+				return cert, nil
+			}
+		}
+
+		route, err := store.Get(key)
 		if err != nil {
 			return nil, fmt.Errorf("%s is not registered", host)
 		}
-		return pki.GetLeafTLSCertificate(route.Hostname)
+		cert, err := pki.GetLeafTLSCertificate(route.Hostname)
+		if err != nil {
+			return nil, err
+		}
+		tlsCerts.Store(key, cert)
+		return cert, nil
 	}
 
 	httpsServer, err := proxy.StartProxyServer(proxyAddr, lookup, getCertificate, defaultCertPath, defaultKeyPath, dashboard, errCh)
@@ -148,7 +228,7 @@ func Run(ctx context.Context, cfg Config) error {
 				log.Printf("failed to accept connection to socket: %v", err)
 				continue
 			}
-			go ipc.HandleConnection(conn, store)
+			go ipc.HandleConnection(conn, store, invalidateCachedCert)
 		}
 	}()
 
@@ -170,6 +250,7 @@ func Run(ctx context.Context, cfg Config) error {
 					continue
 				}
 				for _, r := range pruned {
+					invalidateCachedCert(r.Hostname)
 					log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
 				}
 				if err := registry.Save(store); err != nil {

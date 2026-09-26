@@ -12,10 +12,21 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/ppablomunoz/noports/internal/paths"
 )
+
+// leafLocks serializes leaf creation per hostname so concurrent first uses
+// of the same name share one createLeafCertificate instead of racing on
+// the Exists check + file writes. No new dependencies.
+var leafLocks sync.Map // hostname -> *sync.Mutex
+
+func leafLockFor(hostname string) *sync.Mutex {
+	mu, _ := leafLocks.LoadOrStore(hostname, &sync.Mutex{})
+	return mu.(*sync.Mutex)
+}
 
 func getLeafCertPaths(hostname string) (string, string, error) {
 	dir, err := paths.GetCertsDirPath()
@@ -88,10 +99,21 @@ func GetLeafCertificatePaths(hostname string) (string, string, error) {
 		return "", "", err
 	}
 
-	if !paths.Exists(leafCertPath) || !paths.Exists(leafKeyPath) {
-		if err := createLeafCertificate(hostname); err != nil {
-			return "", "", err
-		}
+	if paths.Exists(leafCertPath) && paths.Exists(leafKeyPath) {
+		return leafCertPath, leafKeyPath, nil
+	}
+
+	mu := leafLockFor(hostname)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Re-check under lock: a concurrent caller may have created it.
+	if paths.Exists(leafCertPath) && paths.Exists(leafKeyPath) {
+		return leafCertPath, leafKeyPath, nil
+	}
+
+	if err := createLeafCertificate(hostname); err != nil {
+		return "", "", err
 	}
 
 	return leafCertPath, leafKeyPath, nil

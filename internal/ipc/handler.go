@@ -10,7 +10,9 @@ import (
 )
 
 // HandleConnection serves a single unix-socket client.
-func HandleConnection(conn net.Conn, store *registry.Store) {
+// onRemove, when non-nil, is called with the normalized hostname after a
+// successful remove so the caller can evict cached state (e.g. TLS certs).
+func HandleConnection(conn net.Conn, store *registry.Store, onRemove func(hostname string)) {
 	defer func() { _ = conn.Close() }()
 
 	decoder := json.NewDecoder(conn)
@@ -31,7 +33,7 @@ func HandleConnection(conn net.Conn, store *registry.Store) {
 	case CmdAliasAdd:
 		err = handleAliasAdd(encoder, store, &req)
 	case CmdAliasRemove:
-		err = handleAliasRemove(encoder, store, &req)
+		err = handleAliasRemove(encoder, store, &req, onRemove)
 	default:
 		err = sendResponse(encoder, &Response{OK: false, Error: "command is not valid"})
 	}
@@ -137,7 +139,7 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 	return sendResponse(encoder, &Response{OK: true})
 }
 
-func handleAliasRemove(encoder *json.Encoder, store *registry.Store, req *Request) error {
+func handleAliasRemove(encoder *json.Encoder, store *registry.Store, req *Request, onRemove func(hostname string)) error {
 	hostname, err := registry.NormalizeHostname(req.Hostname)
 	if err != nil {
 		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
@@ -145,6 +147,9 @@ func handleAliasRemove(encoder *json.Encoder, store *registry.Store, req *Reques
 
 	if err := store.Remove(hostname); err != nil {
 		return sendResponse(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to remove '%s' route: %v", hostname, err)})
+	}
+	if onRemove != nil {
+		onRemove(hostname)
 	}
 	log.Printf("Removed: %s\n", hostname)
 	return sendResponse(encoder, &Response{OK: true})
