@@ -48,7 +48,7 @@ func resolvePort(cmd *cobra.Command, flagPort int) (int, error) {
 	return client.FreeLoopbackPort()
 }
 
-// launchChild starts the backend command with PORT-style env vars set. Only some frameworks need the --port CLI flag; the rest read PORT from the environment.
+// launchChild starts the backend command with PORT-style env vars set. Only some frameworks need the --port CLI flag; the rest read PORT from the environment. The child starts in its own process group so shutdown signals reach the whole tree, including grandchildren.
 func launchChild(bin string, args []string, name, hostname string, port int, portArg bool) (*exec.Cmd, error) {
 	childArgs := args
 	if portArg {
@@ -64,6 +64,8 @@ func launchChild(bin string, args []string, name, hostname string, port int, por
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	command.Stdin = os.Stdin
+	// New group: the wrapper owns shutdown and forwards signals to the tree.
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
@@ -93,7 +95,9 @@ func waitForBackend(command *exec.Cmd, name string, port int, waitDur time.Durat
 	go func() { tcpReady <- client.WaitForTCP(port, waitDur) }()
 	select {
 	case childErr := <-waitCh:
-		// Child exited before the backend became ready.
+		// Child exited before the backend became ready. Reap any
+		// lingering descendants; the session never became ready.
+		killChildTree(command)
 		if cerr := client.RemoveRunRoute(command, name, res); cerr != nil {
 			return fmt.Errorf("failed to clean up command: %w", cerr)
 		}
@@ -104,14 +108,14 @@ func waitForBackend(command *exec.Cmd, name string, port int, waitDur time.Durat
 	case tcpErr := <-tcpReady:
 		if tcpErr != nil {
 			_ = client.RemoveRunRoute(command, name, res)
-			_ = command.Process.Signal(os.Interrupt)
+			stopChildGracefully(command, waitCh)
 			return tcpErr
 		}
 	}
 	return nil
 }
 
-// superviseChild reports readiness and waits for the child or an interrupt. It unregisters the route on exit and gives the child 5s to stop gracefully before killing it.
+// superviseChild reports readiness and waits for the child or an interrupt. It unregisters the route on exit and stops the child tree with interrupt, term, then kill escalation.
 func superviseChild(command *exec.Cmd, name, hostname string, waitCh chan error, res *ipc.Response) error {
 	client.Success("Serving at https://%s\n", hostname)
 
@@ -134,20 +138,47 @@ func superviseChild(command *exec.Cmd, name, hostname string, waitCh chan error,
 			return fmt.Errorf("failed to clean up command: %w", err)
 		}
 
-		if err := command.Process.Signal(os.Interrupt); err != nil {
-			return fmt.Errorf("failed to signal child process: %w", err)
-		}
+		stopChildGracefully(command, waitCh)
+	}
+	return nil
+}
 
+// signalGroup sends sig to the child's process group, falling back to the child itself when the group is gone.
+func signalGroup(command *exec.Cmd, sig syscall.Signal) {
+	if command.Process == nil {
+		return
+	}
+	if err := syscall.Kill(-command.Process.Pid, sig); err == nil {
+		return
+	}
+	_ = command.Process.Signal(sig)
+}
+
+// killChildTree SIGKILLs the child's process group without waiting. It is best-effort cleanup for already-exited children whose descendants may linger.
+func killChildTree(command *exec.Cmd) {
+	if command.Process == nil {
+		return
+	}
+	_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+}
+
+// stopChildGracefully stops the child tree with SIGINT, then SIGTERM, then SIGKILL. It returns once the child exits; each stage waits before escalating.
+func stopChildGracefully(command *exec.Cmd, waitCh <-chan error) {
+	signalGroup(command, syscall.SIGINT)
+	select {
+	case <-waitCh:
+		fmt.Println("child exited cleanly")
+	case <-time.After(5 * time.Second):
+		fmt.Println("child ignored interrupt, sending SIGTERM")
+		signalGroup(command, syscall.SIGTERM)
 		select {
 		case <-waitCh:
-			fmt.Println("child exited cleanly")
-		case <-time.After(5 * time.Second):
-			fmt.Println("timeout waiting for child, killing it")
-			_ = command.Process.Kill()
+		case <-time.After(3 * time.Second):
+			fmt.Println("child ignored SIGTERM, killing it")
+			signalGroup(command, syscall.SIGKILL)
 			<-waitCh
 		}
 	}
-	return nil
 }
 
 // setEnvVar returns env with key set to value, replacing any existing entry instead of appending a duplicate.

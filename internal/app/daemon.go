@@ -168,6 +168,10 @@ func Run(ctx context.Context, cfg Config) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Tell run wrappers to stop while the socket still accepts, so they can
+	// unregister before the listener closes.
+	notifyWrappers(store)
+
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("failed to shutdown http server: %w", err)
 	}
