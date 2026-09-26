@@ -97,7 +97,8 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	selector := newCertSelector(store, serverCert)
+	cache := NewCertCache()
+	selector := newCertSelector(store, serverCert, cache)
 
 	lookup := func(host string) (int, bool) {
 		route, err := store.Get(host)
@@ -120,7 +121,7 @@ func Run(ctx context.Context, cfg Config) error {
 	slog.Info("control socket listening", "path", paths.Socket())
 
 	onRemove := func(hostname string) {
-		invalidateCachedCert(hostname)
+		cache.Invalidate(hostname)
 		proxy.InvalidateHost(hostname)
 	}
 
@@ -149,7 +150,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// A run route lives exactly as long as its run session; aliases are never touched.
 	sweepDone := make(chan struct{})
 	defer close(sweepDone)
-	go startOrphanSweep(store, sweepDone)
+	go startOrphanSweep(store, cache, sweepDone)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)

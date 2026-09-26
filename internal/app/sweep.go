@@ -13,10 +13,10 @@ import (
 const orphanSweepInterval = 30 * time.Second
 
 // sweepOrphans prunes run routes whose processes are gone and persists the result. Aliases are never touched; a dead wrapper frees the name even if the orphaned child still listens.
-func sweepOrphans(store *registry.Store) {
+func sweepOrphans(store *registry.Store, cache *CertCache) {
 	pruned, err := store.PruneAndPersist(registry.RouteAlive)
 	for _, r := range pruned {
-		invalidateCachedCert(r.Hostname)
+		cache.Invalidate(r.Hostname)
 		proxy.InvalidateHost(r.Hostname)
 	}
 	if err != nil {
@@ -25,13 +25,13 @@ func sweepOrphans(store *registry.Store) {
 }
 
 // startOrphanSweep reaps orphaned run routes on every tick until done closes. It runs in its own goroutine and returns when done closes.
-func startOrphanSweep(store *registry.Store, done <-chan struct{}) {
+func startOrphanSweep(store *registry.Store, cache *CertCache, done <-chan struct{}) {
 	ticker := time.NewTicker(orphanSweepInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			sweepOrphans(store)
+			sweepOrphans(store, cache)
 		case <-done:
 			return
 		}
