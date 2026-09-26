@@ -6,6 +6,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/ppablomunoz/noports/internal/client"
 	"github.com/ppablomunoz/noports/internal/ipc"
@@ -52,6 +53,12 @@ var getCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(data.Route)
+		}
+
 		fmt.Printf("https://%s\n", data.Route.Hostname)
 		return nil
 	},
@@ -59,5 +66,5 @@ var getCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(getCmd)
-	// getCmd.PersistentFlags().String("foo", "", "A help for foo")
+	getCmd.Flags().Bool("json", false, "Output route as JSON")
 }

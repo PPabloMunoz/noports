@@ -5,9 +5,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
 
 	"github.com/ppablomunoz/noports/internal/client"
-	"github.com/ppablomunoz/noports/internal/ipc"
+	"github.com/ppablomunoz/noports/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -20,35 +21,26 @@ var listCmd = &cobra.Command{
 			return err
 		}
 
-		conn, err := client.ConnectToSocket()
+		routes, err := client.ListRoutes()
 		if err != nil {
 			return err
 		}
-		defer func() { _ = conn.Close() }()
 
-		encoder := json.NewEncoder(conn)
-		decoder := json.NewDecoder(conn)
-
-		req := &ipc.Request{Command: ipc.CmdList}
-		if err := client.SendRequest(encoder, req); err != nil {
-			return err
+		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+			if routes == nil {
+				routes = []registry.Route{}
+			}
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(routes)
 		}
 
-		var res ipc.Response
-		if err := client.GetResponse(decoder, &res); err != nil {
-			return err
-		}
-
-		var data ipc.DataResponseList
-		if err := client.GetDataList(&res.Data, &data); err != nil {
-			return err
-		}
-
-		client.PrintRoutesTable(data.Routes)
+		client.PrintRoutesTable(routes)
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(listCmd)
+	listCmd.Flags().Bool("json", false, "Output routes as JSON")
 }

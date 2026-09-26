@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -34,6 +33,11 @@ const (
 )
 
 func PrintRoutesTable(routes []registry.Route) {
+	if len(routes) == 0 {
+		Info("No routes registered. Run `noports run --name <name> -- <command>` to add one.\n")
+		return
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 
 	_, _ = fmt.Fprintf(w, "NAME\tHOST\tPORT\tPID\n")
@@ -220,31 +224,20 @@ func pidAlive(pid int) bool {
 	return registry.ProcessAlive(pid)
 }
 
-func randomNum() int {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	min := 4000
-	max := 4999
-	return r.Intn(max-min+1) + min
-}
-
+// GetRandomPort asks the OS for a free loopback port by binding
+// 127.0.0.1:0. Callers must still handle the bind-then-use race: the port
+// is released on return and could be taken before the child binds it.
 func GetRandomPort() (int, error) {
-	port := randomNum()
-
-	start := time.Now()
-	const maxTimeout = 10 * time.Second
-
-	// Check if port in use
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	for err != nil {
-		if time.Since(start) > maxTimeout {
-			return 0, fmt.Errorf("could not find free port within %v", maxTimeout)
-		}
-
-		port = randomNum()
-		listener, err = net.Listen("tcp", fmt.Sprintf(":%d", port))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, fmt.Errorf("could not find free port: %w", err)
 	}
-	_ = listener.Close()
-	return port, nil
+	defer func() { _ = listener.Close() }()
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("unexpected listener addr type %T", listener.Addr())
+	}
+	return addr.Port, nil
 }
 
 // SetEnv returns env with key set to value, replacing any existing entry
@@ -283,20 +276,45 @@ func CleanUpCommand(command *exec.Cmd, name string, res *ipc.Response) error {
 
 func Success(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s[SUCCESS]%s %s", ColorGreen, ColorReset, msg)
+	fmt.Printf("%s %s", paint(ColorGreen, "[SUCCESS]"), msg)
 }
 
 func Info(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s[INFO]%s %s", ColorBlue, ColorReset, msg)
+	fmt.Printf("%s %s", paint(ColorBlue, "[INFO]"), msg)
 }
 
 func Warning(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s[WARN]%s %s", ColorYellow, ColorReset, msg)
+	fmt.Printf("%s %s", paint(ColorYellow, "[WARN]"), msg)
 }
 
 func Error(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s[ERROR]%s %s", ColorRed, ColorReset, msg)
+	fmt.Printf("%s %s", paint(ColorRed, "[ERROR]"), msg)
+}
+
+// paint wraps s in ANSI color codes, or returns it plain when colors are
+// disabled (piped output, NO_COLOR, or dumb terminal).
+func paint(color, s string) string {
+	if !colorEnabled() {
+		return s
+	}
+	return color + s + ColorReset
+}
+
+// colorEnabled reports whether ANSI colors may be emitted: stdout must be a
+// TTY, TERM must not be "dumb", and NO_COLOR must be unset.
+func colorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	st, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return st.Mode()&os.ModeCharDevice != 0
 }

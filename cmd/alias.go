@@ -76,7 +76,7 @@ var aliasCmd = &cobra.Command{
 			return err
 		}
 
-		client.Info("Alias added\n")
+		client.Success("Alias added: https://%s\n", hostname)
 		return nil
 	},
 }

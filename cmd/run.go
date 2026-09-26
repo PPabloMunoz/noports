@@ -126,6 +126,31 @@ var runCmd = &cobra.Command{
 			waitCh <- command.Wait()
 		}()
 
+		if waitDur, _ := cmd.Flags().GetDuration("wait"); waitDur > 0 {
+			client.Info("Waiting up to %s for backend on port %d...\n", waitDur, port)
+			tcpReady := make(chan error, 1)
+			go func() { tcpReady <- client.WaitForTCP(port, waitDur) }()
+			select {
+			case childErr := <-waitCh:
+				// Child exited before the backend became ready.
+				if cerr := client.CleanUpCommand(command, name, &res); cerr != nil {
+					return fmt.Errorf("failed to clean up command: %w", cerr)
+				}
+				if childErr != nil {
+					return fmt.Errorf("command exited before backend became ready: %w", childErr)
+				}
+				return fmt.Errorf("command exited before backend became ready")
+			case tcpErr := <-tcpReady:
+				if tcpErr != nil {
+					_ = client.CleanUpCommand(command, name, &res)
+					_ = command.Process.Signal(os.Interrupt)
+					return tcpErr
+				}
+			}
+		}
+
+		client.Success("Serving at https://%s\n", hostname)
+
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
@@ -174,4 +199,5 @@ func init() {
 	runCmd.Flags().String("name", "", "Name the route")
 	runCmd.Flags().Int("port", 0, "Port to run the app (default: random free port)")
 	runCmd.Flags().Bool("port-arg", false, "Append --port <port> to the child command (needed by some frameworks, e.g. astro)")
+	runCmd.Flags().Duration("wait", 0, "Wait up to this long for the backend to accept TCP before serving (e.g. --wait 10s)")
 }
