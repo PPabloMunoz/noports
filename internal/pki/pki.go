@@ -25,25 +25,25 @@ const (
 	caRenewBeforeExpiry = 90 * 24 * time.Hour
 )
 
-// GetCACertPath returns ~/.noports/certs/ca.pem.
+// GetCACertPath returns the path to the local CA certificate file. It resolves the certs directory first and joins it with the CA filename.
 func GetCACertPath() (string, error) {
-	dir, err := paths.GetCertsDirPath()
+	dir, err := paths.CertsDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, CACertFile), nil
 }
 
-// GetCAKeyPath returns ~/.noports/certs/ca-key.pem.
+// GetCAKeyPath returns the path to the local CA private key file. It resolves the certs directory first and joins it with the key filename.
 func GetCAKeyPath() (string, error) {
-	dir, err := paths.GetCertsDirPath()
+	dir, err := paths.CertsDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, CAKeyFile), nil
 }
 
-func writeCertAndKey(certPath, keyPath string, derBytes []byte, key *ecdsa.PrivateKey) error {
+func writeKeyPair(certPath, keyPath string, derBytes []byte, key *ecdsa.PrivateKey) error {
 	certOut, err := os.OpenFile(certPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", certPath, err)
@@ -80,8 +80,9 @@ func writeCertAndKey(certPath, keyPath string, derBytes []byte, key *ecdsa.Priva
 	return nil
 }
 
-// certNotAfter returns the NotAfter of the PEM-encoded certificate at certPath.
-func certNotAfter(certPath string) (time.Time, error) {	certBytes, err := os.ReadFile(certPath)
+// notAfter returns the NotAfter expiry of the PEM-encoded certificate at certPath. It reads and parses the file on each call.
+func notAfter(certPath string) (time.Time, error) {
+	certBytes, err := os.ReadFile(certPath)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -96,10 +97,8 @@ func certNotAfter(certPath string) (time.Time, error) {	certBytes, err := os.Rea
 	return cert.NotAfter, nil
 }
 
-// CertFresh reports whether a loaded TLS cert stays valid beyond the leaf
-// renewal window. Certs without a parsed Leaf are treated as stale so the
-// caller reloads from disk.
-func CertFresh(cert *tls.Certificate) bool {
+// IsCertFresh reports whether a loaded TLS cert stays valid beyond the leaf renewal window. Certs without a parsed Leaf are treated as stale so the caller reloads them from disk.
+func IsCertFresh(cert *tls.Certificate) bool {
 	if cert == nil || cert.Leaf == nil {
 		return false
 	}

@@ -25,7 +25,7 @@ var logsCmd = &cobra.Command{
 		n, _ := cmd.Flags().GetInt("tail")
 		follow, _ := cmd.Flags().GetBool("follow")
 
-		logPath, err := paths.GetLogFilePath()
+		logPath, err := paths.LogFile()
 		if err != nil {
 			return err
 		}
@@ -34,11 +34,11 @@ var logsCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := printTail(logPath, n); err != nil {
+		if err := printLastLines(logPath, n); err != nil {
 			return err
 		}
 		if follow {
-			return followFile(logPath)
+			return followLog(logPath)
 		}
 		return nil
 	},
@@ -50,7 +50,8 @@ func init() {
 	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output")
 }
 
-func printTail(logPath string, n int) error {
+// printLastLines prints the last n lines of the daemon log. A non-positive n prints the whole file.
+func printLastLines(logPath string, n int) error {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", logPath, err)
@@ -69,7 +70,8 @@ func printTail(logPath string, n int) error {
 	return nil
 }
 
-func followFile(logPath string) error {
+// followLog tails the daemon log until interrupted. It polls for growth and restarts from zero when the file is truncated.
+func followLog(logPath string) error {
 	f, err := os.Open(logPath)
 	if err != nil {
 		return fmt.Errorf("failed to open %s: %w", logPath, err)

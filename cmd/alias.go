@@ -38,7 +38,7 @@ var aliasCmd = &cobra.Command{
 			return err
 		}
 
-		conn, err := client.ConnectToSocket()
+		conn, err := ipc.Dial()
 		if err != nil {
 			return err
 		}
@@ -49,12 +49,12 @@ var aliasCmd = &cobra.Command{
 
 		if cmd.Flags().Changed("remove") {
 			req := &ipc.Request{Command: ipc.CmdAliasRemove, Hostname: hostname}
-			if err := client.SendRequest(encoder, req); err != nil {
+			if err := client.Send(encoder, req); err != nil {
 				return err
 			}
 
 			var res ipc.Response
-			if err := client.GetResponse(decoder, &res); err != nil {
+			if err := client.Receive(decoder, &res); err != nil {
 				return err
 			}
 
@@ -67,12 +67,12 @@ var aliasCmd = &cobra.Command{
 		}
 
 		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: -1, WrapperPID: -1}
-		if err := client.SendRequest(encoder, req); err != nil {
+		if err := client.Send(encoder, req); err != nil {
 			return err
 		}
 
 		var res ipc.Response
-		if err := client.GetResponse(decoder, &res); err != nil {
+		if err := client.Receive(decoder, &res); err != nil {
 			return err
 		}
 

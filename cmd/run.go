@@ -64,7 +64,7 @@ var runCmd = &cobra.Command{
 				return fmt.Errorf("invalid port %d: must be between 1 and 65535", port)
 			}
 		} else {
-			port, err = client.GetRandomPort()
+			port, err = client.FreeLoopbackPort()
 			if err != nil {
 				return err
 			}
@@ -78,10 +78,10 @@ var runCmd = &cobra.Command{
 		}
 		command := exec.Command(args[0], childArgs...)
 		env := os.Environ()
-		env = client.SetEnv(env, "PORT", strconv.Itoa(port))
-		env = client.SetEnv(env, "NOPORTS_PORT", strconv.Itoa(port))
-		env = client.SetEnv(env, "NOPORTS_NAME", name)
-		env = client.SetEnv(env, "NOPORTS_URL", fmt.Sprintf("https://%s", hostname))
+		env = client.SetEnvVar(env, "PORT", strconv.Itoa(port))
+		env = client.SetEnvVar(env, "NOPORTS_PORT", strconv.Itoa(port))
+		env = client.SetEnvVar(env, "NOPORTS_NAME", name)
+		env = client.SetEnvVar(env, "NOPORTS_URL", fmt.Sprintf("https://%s", hostname))
 		command.Env = env
 		command.Stdout = os.Stdout
 		command.Stderr = os.Stderr
@@ -92,7 +92,7 @@ var runCmd = &cobra.Command{
 		}
 
 		// Connect to socket
-		conn, err := client.ConnectToSocket()
+		conn, err := ipc.Dial()
 		if err != nil {
 			_ = command.Process.Signal(os.Interrupt)
 			return err
@@ -110,13 +110,13 @@ var runCmd = &cobra.Command{
 		childStart, _ := registry.ProcessStartTime(command.Process.Pid)
 		wrapperStart, _ := registry.ProcessStartTime(wrapperPID)
 		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: command.Process.Pid, WrapperPID: wrapperPID, ChildStartTime: childStart, WrapperStartTime: wrapperStart}
-		if err := client.SendRequest(encoder, req); err != nil {
+		if err := client.Send(encoder, req); err != nil {
 			_ = command.Process.Signal(os.Interrupt)
 			return err
 		}
 
 		var res ipc.Response
-		if err := client.GetResponse(decoder, &res); err != nil {
+		if err := client.Receive(decoder, &res); err != nil {
 			_ = command.Process.Signal(os.Interrupt)
 			return err
 		}
@@ -133,7 +133,7 @@ var runCmd = &cobra.Command{
 			select {
 			case childErr := <-waitCh:
 				// Child exited before the backend became ready.
-				if cerr := client.CleanUpCommand(command, name, &res); cerr != nil {
+				if cerr := client.RemoveRunRoute(command, name, &res); cerr != nil {
 					return fmt.Errorf("failed to clean up command: %w", cerr)
 				}
 				if childErr != nil {
@@ -142,7 +142,7 @@ var runCmd = &cobra.Command{
 				return fmt.Errorf("command exited before backend became ready")
 			case tcpErr := <-tcpReady:
 				if tcpErr != nil {
-					_ = client.CleanUpCommand(command, name, &res)
+					_ = client.RemoveRunRoute(command, name, &res)
 					_ = command.Process.Signal(os.Interrupt)
 					return tcpErr
 				}
@@ -158,7 +158,7 @@ var runCmd = &cobra.Command{
 		case err := <-waitCh:
 			// Error in child command
 			signal.Stop(sigCh)
-			if err := client.CleanUpCommand(command, name, &res); err != nil {
+			if err := client.RemoveRunRoute(command, name, &res); err != nil {
 				return fmt.Errorf("failed to clean up command: %w", err)
 			}
 			if err != nil {
@@ -166,7 +166,7 @@ var runCmd = &cobra.Command{
 			}
 			return nil
 		case <-sigCh:
-			if err := client.CleanUpCommand(command, name, &res); err != nil {
+			if err := client.RemoveRunRoute(command, name, &res); err != nil {
 				return fmt.Errorf("failed to clean up command: %w", err)
 			}
 

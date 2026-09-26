@@ -44,10 +44,8 @@ func (s *Store) List() map[string]Route {
 	return out
 }
 
-// FirstLoad save all the routes into Store without saving it into routes.json. This function SHOULD
-// ONLY be used on the intial load of the daemon process, it overwrite anything saved that has
-// the same key
-func (s *Store) FirstLoad(routes []Route) {
+// importRoutes loads routes into memory without persisting them. It is only used at daemon startup to hydrate the store, overwriting any entry with the same hostname.
+func (s *Store) importRoutes(routes []Route) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, r := range routes {

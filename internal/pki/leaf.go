@@ -17,9 +17,7 @@ import (
 	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-// leafLocks serializes leaf creation per hostname so concurrent first uses
-// of the same name share one createLeafCertificate instead of racing on
-// the Exists check + file writes. No new dependencies.
+// leafLocks serializes leaf creation per hostname so concurrent first uses of the same name share one issuance instead of racing on the Exists check and file writes.
 var leafLocks sync.Map // hostname -> *sync.Mutex
 
 func leafLockFor(hostname string) *sync.Mutex {
@@ -27,21 +25,21 @@ func leafLockFor(hostname string) *sync.Mutex {
 	return mu.(*sync.Mutex)
 }
 
-func getLeafCertPaths(hostname string) (string, string, error) {
-	dir, err := paths.GetCertsDirPath()
+func leafPaths(hostname string) (string, string, error) {
+	dir, err := paths.CertsDir()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get certificates dir: %w", err)
 	}
 	return filepath.Join(dir, fmt.Sprintf("%s.pem", hostname)), filepath.Join(dir, fmt.Sprintf("%s-key.pem", hostname)), nil
 }
 
-func createLeafCertificate(hostname string) error {
+func issueLeaf(hostname string) error {
 	caCert, caKey, err := loadCA()
 	if err != nil {
 		return fmt.Errorf("failed to get CA certificate: %w", err)
 	}
 
-	leafCertPath, leafKeyPath, err := getLeafCertPaths(hostname)
+	leafCertPath, leafKeyPath, err := leafPaths(hostname)
 	if err != nil {
 		return err
 	}
@@ -83,7 +81,7 @@ func createLeafCertificate(hostname string) error {
 		return fmt.Errorf("failed to create leaf certificate: %w", err)
 	}
 
-	if err := writeCertAndKey(leafCertPath, leafKeyPath, derBytes, leafKey); err != nil {
+	if err := writeKeyPair(leafCertPath, leafKeyPath, derBytes, leafKey); err != nil {
 		return err
 	}
 
@@ -91,15 +89,14 @@ func createLeafCertificate(hostname string) error {
 	return nil
 }
 
-// GetLeafCertificatePaths ensures a valid leaf cert exists for hostname and returns its paths.
-// Expired, near-expiry (<30d left), corrupt, or missing certs are regenerated.
+// GetLeafCertificatePaths ensures a valid leaf cert exists for hostname and returns its paths. Expired, near-expiry, corrupt, or missing certs are regenerated.
 func GetLeafCertificatePaths(hostname string) (string, string, error) {
-	leafCertPath, leafKeyPath, err := getLeafCertPaths(hostname)
+	leafCertPath, leafKeyPath, err := leafPaths(hostname)
 	if err != nil {
 		return "", "", err
 	}
 
-	if leafCertValid(leafCertPath, leafKeyPath) {
+	if leafValid(leafCertPath, leafKeyPath) {
 		return leafCertPath, leafKeyPath, nil
 	}
 
@@ -111,34 +108,33 @@ func GetLeafCertificatePaths(hostname string) (string, string, error) {
 	}()
 
 	// Re-check under lock: a concurrent caller may have created it.
-	if leafCertValid(leafCertPath, leafKeyPath) {
+	if leafValid(leafCertPath, leafKeyPath) {
 		return leafCertPath, leafKeyPath, nil
 	}
 
 	if paths.Exists(leafCertPath) {
 		fmt.Printf("renewing leaf certificate for %s (expired or near expiry)\n", hostname)
 	}
-	if err := createLeafCertificate(hostname); err != nil {
+	if err := issueLeaf(hostname); err != nil {
 		return "", "", err
 	}
 
 	return leafCertPath, leafKeyPath, nil
 }
 
-// leafCertValid reports whether both files exist and the cert stays valid
-// beyond the renewal window. Anything else means regenerate.
-func leafCertValid(leafCertPath, leafKeyPath string) bool {
+// leafValid reports whether both files exist and the cert stays valid beyond the renewal window. Anything else means regenerate.
+func leafValid(leafCertPath, leafKeyPath string) bool {
 	if !paths.Exists(leafCertPath) || !paths.Exists(leafKeyPath) {
 		return false
 	}
-	notAfter, err := certNotAfter(leafCertPath)
+	expiry, err := notAfter(leafCertPath)
 	if err != nil {
 		return false
 	}
-	return time.Now().Add(leafRenewBeforeExpiry).Before(notAfter)
+	return time.Now().Add(leafRenewBeforeExpiry).Before(expiry)
 }
 
-// GetLeafTLSCertificate loads (creating if needed) the TLS cert for hostname.
+// GetLeafTLSCertificate loads the TLS cert for hostname, creating it first when missing. It parses the leaf so freshness checks work without re-reading disk.
 func GetLeafTLSCertificate(hostname string) (*tls.Certificate, error) {
 	leafCertPath, leafKeyPath, err := GetLeafCertificatePaths(hostname)
 	if err != nil {

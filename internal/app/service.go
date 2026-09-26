@@ -101,7 +101,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	pidFilePath, err := paths.GetPIDFilePath()
+	pidFilePath, err := paths.PIDFile()
 	if err != nil {
 		return fmt.Errorf("failed to get daemon pid file path: %w", err)
 	}
@@ -170,7 +170,7 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 		return route.Port, true
 	}
-	dashboard := buildDashboardHandler(cfg.DashboardTemplate, store)
+	dashboard := newDashboardHandler(cfg.DashboardTemplate, store)
 	checkCARotation := func() {
 		caPath, err := pki.GetCACertPath()
 		if err != nil {
@@ -205,15 +205,14 @@ func Run(ctx context.Context, cfg Config) error {
 
 		// Single route lookup on the fast path: a missing route also
 		// evicts any stale cached cert for the name.
-		route, err := store.Get(key)
-		if err != nil {
+		if _, err := store.Get(key); err != nil {
 			invalidateCachedCert(key)
 			return nil, fmt.Errorf("%s is not registered", host)
 		}
 
 		// Fast path: cached + fresh (beyond the 30d renewal window).
 		if cert, ok := loadCachedCert(key); ok {
-			if pki.CertFresh(cert) {
+			if pki.IsCertFresh(cert) {
 				return cert, nil
 			}
 			invalidateCachedCert(key)
@@ -228,13 +227,13 @@ func Run(ctx context.Context, cfg Config) error {
 			tlsLocks.Delete(key)
 		}()
 
-		if cert, ok := loadCachedCert(key); ok && pki.CertFresh(cert) {
+		if cert, ok := loadCachedCert(key); ok && pki.IsCertFresh(cert) {
 			return cert, nil
 		}
 
 		// Revalidate under lock: the route may have been removed while
 		// waiting. Second and last lookup on this path.
-		route, err = store.Get(key)
+		route, err := store.Get(key)
 		if err != nil {
 			invalidateCachedCert(key)
 			return nil, fmt.Errorf("%s is not registered", host)
@@ -256,11 +255,11 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Socket listening on %s\n", paths.GetSocketPath())
+	log.Printf("Socket listening on %s\n", paths.Socket())
 
 	onRemove := func(hostname string) {
 		invalidateCachedCert(hostname)
-		proxy.Invalidate(hostname)
+		proxy.InvalidateHost(hostname)
 	}
 
 	if readyPipe != nil {
@@ -303,7 +302,7 @@ func Run(ctx context.Context, cfg Config) error {
 				}
 				for _, r := range pruned {
 					invalidateCachedCert(r.Hostname)
-					proxy.Invalidate(r.Hostname)
+					proxy.InvalidateHost(r.Hostname)
 					log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
 				}
 				if err := registry.Save(store); err != nil {
@@ -353,9 +352,8 @@ type dashboardData struct {
 	Routes []registry.Route
 }
 
-// buildDashboardHandler returns an http.Handler that renders tmpl with the
-// active routes on every request. Nil tmpl means nil handler (proxy 404s localhost).
-func buildDashboardHandler(tmpl *template.Template, store *registry.Store) http.Handler {
+// newDashboardHandler returns a handler that renders tmpl with active routes on every request. A nil tmpl yields a nil handler so the proxy 404s localhost.
+func newDashboardHandler(tmpl *template.Template, store *registry.Store) http.Handler {
 	if tmpl == nil {
 		return nil
 	}

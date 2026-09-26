@@ -33,13 +33,13 @@ func EnsureCA() error {
 		return fmt.Errorf("failed to get CA key path: %w", err)
 	}
 
-	if needsCARotation(certPath, keyPath) {
+	if caNeedsRotation(certPath, keyPath) {
 		fmt.Println("CA certificate missing, expired, or near expiry — rotating")
 		if err := generateCA(); err != nil {
 			return err
 		}
 		// Leafs were signed by the old CA; drop them so they are re-issued on demand.
-		if err := removeLeafCerts(); err != nil {
+		if err := removeStaleLeafs(); err != nil {
 			return err
 		}
 	}
@@ -57,24 +57,21 @@ func EnsureCA() error {
 	return nil
 }
 
-// needsCARotation reports whether the CA must be (re)generated: files
-// missing, cert corrupt, expired, or inside the renewal window.
-func needsCARotation(certPath, keyPath string) bool {
+// caNeedsRotation reports whether the CA must be (re)generated. It returns true when files are missing, the cert is corrupt, expired, or inside the renewal window.
+func caNeedsRotation(certPath, keyPath string) bool {
 	if !paths.Exists(certPath) || !paths.Exists(keyPath) {
 		return true
 	}
-	notAfter, err := certNotAfter(certPath)
+	expiry, err := notAfter(certPath)
 	if err != nil {
 		return true
 	}
-	return !time.Now().Add(caRenewBeforeExpiry).Before(notAfter)
+	return !time.Now().Add(caRenewBeforeExpiry).Before(expiry)
 }
 
-// removeLeafCerts deletes every *.pem in the certs dir except the CA pair.
-// Called after CA rotation since old leafs are no longer verifiable;
-// they are re-issued on demand by GetLeafCertificatePaths.
-func removeLeafCerts() error {
-	dir, err := paths.GetCertsDirPath()
+// removeStaleLeafs deletes every *.pem in the certs dir except the CA pair. Called after CA rotation since old leafs are no longer verifiable; they are re-issued on demand.
+func removeStaleLeafs() error {
+	dir, err := paths.CertsDir()
 	if err != nil {
 		return fmt.Errorf("failed to get certificates dir: %w", err)
 	}
@@ -105,7 +102,8 @@ var (
 	caCacheKey  *ecdsa.PrivateKey
 )
 
-func generateCA() error {	certPath, err := GetCACertPath()
+func generateCA() error {
+	certPath, err := GetCACertPath()
 	if err != nil {
 		return fmt.Errorf("failed to get CA cert path: %w", err)
 	}
@@ -159,7 +157,7 @@ func generateCA() error {	certPath, err := GetCACertPath()
 		return fmt.Errorf("failed to create CA certificate: %w", err)
 	}
 
-	if err := writeCertAndKey(certPath, keyPath, derBytes, caKey); err != nil {
+	if err := writeKeyPair(certPath, keyPath, derBytes, caKey); err != nil {
 		return err
 	}
 

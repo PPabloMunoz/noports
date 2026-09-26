@@ -24,7 +24,7 @@ var proxyCmd = &cobra.Command{
 			}
 			client.Info("Proxy started\n")
 		case "stop":
-			if err := client.StopProxy(); err != nil {
+			if err := client.StopDaemon(); err != nil {
 				return err
 			}
 			client.Info("Proxy stopped\n")

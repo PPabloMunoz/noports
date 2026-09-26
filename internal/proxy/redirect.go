@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"log"
-	"net"
 	"net/http"
 	"time"
 )
@@ -13,7 +12,7 @@ const (
 	DefaultProxyAddr    = ":443"
 )
 
-// StartRedirectServer starts an HTTP server that redirects everything to HTTPS.
+// StartRedirectServer starts an HTTP server that redirects every request to HTTPS. It preserves host and path while forcing a permanent redirect.
 func StartRedirectServer(addr string, errCh chan<- error) *http.Server {
 	if addr == "" {
 		addr = DefaultRedirectAddr
@@ -26,7 +25,7 @@ func StartRedirectServer(addr string, errCh chan<- error) *http.Server {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			host := stripPort(r.Host)
+			host := hostOnly(r.Host)
 			target := "https://" + host + r.URL.RequestURI()
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 		}),
@@ -39,11 +38,4 @@ func StartRedirectServer(addr string, errCh chan<- error) *http.Server {
 		}
 	}()
 	return srv
-}
-
-func stripPort(hostport string) string {
-	if h, _, err := net.SplitHostPort(hostport); err == nil {
-		return h
-	}
-	return hostport
 }

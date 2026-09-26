@@ -3,28 +3,20 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 
 	"github.com/ppablomunoz/noports/internal/ipc"
-	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-func ConnectToSocket() (net.Conn, error) {
-	conn, err := net.Dial("unix", paths.GetSocketPath())
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to socket: %w", err)
-	}
-	return conn, nil
-}
-
-func SendRequest(encoder *json.Encoder, req *ipc.Request) error {
+// Send encodes a single control request to the daemon. It wraps encode failures with context and leaves connection handling to the caller.
+func Send(encoder *json.Encoder, req *ipc.Request) error {
 	if err := encoder.Encode(req); err != nil {
 		return fmt.Errorf("failed to encode request: %w", err)
 	}
 	return nil
 }
 
-func GetResponse(decoder *json.Decoder, res *ipc.Response) error {
+// Receive decodes one daemon response and returns an error when the daemon reports failure. It wraps decode failures with context for CLI reporting.
+func Receive(decoder *json.Decoder, res *ipc.Response) error {
 	if err := decoder.Decode(res); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -34,7 +26,8 @@ func GetResponse(decoder *json.Decoder, res *ipc.Response) error {
 	return nil
 }
 
-func GetDataList(resData any, result *ipc.DataResponseList) error {
+// DecodeListResponse converts the generic response payload into a route list. It round-trips through JSON so daemon and CLI can evolve independently.
+func DecodeListResponse(resData any, result *ipc.DataResponseList) error {
 	dataResBytes, err := json.Marshal(resData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data response: %w", err)
@@ -46,7 +39,8 @@ func GetDataList(resData any, result *ipc.DataResponseList) error {
 	return nil
 }
 
-func GetDataGet(resData any, result *ipc.DataResponseGet) error {
+// DecodeGetResponse converts the generic response payload into a single route. It round-trips through JSON so daemon and CLI can evolve independently.
+func DecodeGetResponse(resData any, result *ipc.DataResponseGet) error {
 	dataResBytes, err := json.Marshal(resData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data response: %w", err)

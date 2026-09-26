@@ -6,16 +6,15 @@ import (
 	"os"
 )
 
-// Exists reports whether filePath exists.
+// Exists reports whether filePath exists. It returns false for missing files and ignores other stat errors.
 func Exists(filePath string) bool {
 	_, err := os.Stat(filePath)
 	return !errors.Is(err, os.ErrNotExist)
 }
 
-// EnsureDirs creates ~/.noports/certs (parents included).
-// PID-file handling lives in internal/app, not here.
+// EnsureDirs creates ~/.noports/certs including parents. PID-file handling lives in internal/app, not here.
 func EnsureDirs() error {
-	certsDir, err := GetCertsDirPath()
+	certsDir, err := CertsDir()
 	if err != nil {
 		return fmt.Errorf("failed to get certs dir: %w", err)
 	}
@@ -25,9 +24,9 @@ func EnsureDirs() error {
 	return nil
 }
 
-// OpenLogFile opens ~/.noports/daemon.log for appending.
+// OpenLogFile opens ~/.noports/daemon.log for appending, creating it when missing. Callers must close the returned file.
 func OpenLogFile() (*os.File, error) {
-	p, err := GetLogFilePath()
+	p, err := LogFile()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get daemon log file path: %w", err)
 	}

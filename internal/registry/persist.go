@@ -10,9 +10,9 @@ import (
 	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-// Load reads routes.json (creating it if missing) into s.
+// Load reads routes.json into s, creating the file when missing. It also prunes orphaned run routes left by crashed wrappers and persists the result.
 func Load(s *Store) error {
-	routesPath, err := paths.GetRoutesFilePath()
+	routesPath, err := paths.RoutesFile()
 	if err != nil {
 		return fmt.Errorf("failed to get routes json file path: %w", err)
 	}
@@ -35,7 +35,7 @@ func Load(s *Store) error {
 		return fmt.Errorf("failed to unmarshal routes json: %w", err)
 	}
 
-	s.FirstLoad(routes)
+	s.importRoutes(routes)
 
 	// Self-heal routes leaked by abnormally-terminated `run` wrappers
 	// (kill -9, hangup, crash): their PIDs are dead but nothing ever sent
@@ -51,9 +51,9 @@ func Load(s *Store) error {
 	return nil
 }
 
-// Save load all routes in store into routes.json file
+// Save writes all in-memory routes to routes.json atomically. It marshals the current table and replaces the file via a temporary file and rename.
 func Save(s *Store) error {
-	routesPath, err := paths.GetRoutesFilePath()
+	routesPath, err := paths.RoutesFile()
 	if err != nil {
 		return fmt.Errorf("failed to get routes json file path: %w", err)
 	}

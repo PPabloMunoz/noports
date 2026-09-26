@@ -28,7 +28,7 @@ var cleanCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := client.StopProxy(); err != nil {
+		if err := client.StopDaemon(); err != nil {
 			return err
 		}
 		client.Info("proxy stopped\n")
@@ -38,7 +38,7 @@ var cleanCmd = &cobra.Command{
 		}
 		client.Info("CA uninstalled\n")
 
-		certsDir, err := paths.GetCertsDirPath()
+		certsDir, err := paths.CertsDir()
 		if err != nil {
 			return fmt.Errorf("failed to get certificates dir path: %w", err)
 		}
@@ -47,7 +47,7 @@ var cleanCmd = &cobra.Command{
 		}
 		client.Info("certificates removed\n")
 
-		routesPath, err := paths.GetRoutesFilePath()
+		routesPath, err := paths.RoutesFile()
 		if err != nil {
 			return fmt.Errorf("failed to get routes file path: %w", err)
 		}
@@ -57,7 +57,7 @@ var cleanCmd = &cobra.Command{
 		client.Info("routes deleted\n")
 
 		// Delete log file
-		logFilePath, err := paths.GetLogFilePath()
+		logFilePath, err := paths.LogFile()
 		if err != nil {
 			return fmt.Errorf("failed to get daemon log file path: %w", err)
 		}
@@ -66,7 +66,7 @@ var cleanCmd = &cobra.Command{
 		}
 
 		// Delete .pid
-		pidPath, err := paths.GetPIDFilePath()
+		pidPath, err := paths.PIDFile()
 		if err != nil {
 			return fmt.Errorf("failed to get pid file path: %w", err)
 		}
@@ -75,7 +75,7 @@ var cleanCmd = &cobra.Command{
 		}
 
 		// Delete socket file
-		socketPath := paths.GetSocketPath()
+		socketPath := paths.Socket()
 		if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("failed to remove %s: %w", socketPath, err)
 		}

@@ -41,7 +41,7 @@ func HandleConnection(conn net.Conn, store *registry.Store, onRemove func(hostna
 	case CmdAliasRemove:
 		err = handleAliasRemove(encoder, store, &req, onRemove)
 	default:
-		err = sendResponse(encoder, &Response{OK: false, Error: "command is not valid"})
+		err = respond(encoder, &Response{OK: false, Error: "command is not valid"})
 	}
 	if err != nil {
 		log.Println("[ERROR]", err)
@@ -54,27 +54,27 @@ func handleList(encoder *json.Encoder, store *registry.Store) error {
 		result = append(result, r)
 	}
 	res := &Response{OK: true, Data: DataResponseList{Routes: result}}
-	return sendResponse(encoder, res)
+	return respond(encoder, res)
 }
 
 func handleGet(encoder *json.Encoder, store *registry.Store, req *Request) error {
 	if req.Hostname == "" {
-		return sendResponse(encoder, &Response{OK: false, Error: "hostname is required"})
+		return respond(encoder, &Response{OK: false, Error: "hostname is required"})
 	}
 
 	hostname, err := registry.NormalizeHostname(req.Hostname)
 	if err != nil {
-		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
+		return respond(encoder, &Response{OK: false, Error: err.Error()})
 	}
 
 	route, err := store.Get(hostname)
 	if err != nil {
-		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
+		return respond(encoder, &Response{OK: false, Error: err.Error()})
 	}
-	return sendResponse(encoder, &Response{OK: true, Data: DataResponseGet{Route: *route}})
+	return respond(encoder, &Response{OK: true, Data: DataResponseGet{Route: *route}})
 }
 
-func sendResponse(encoder *json.Encoder, res *Response) error {
+func respond(encoder *json.Encoder, res *Response) error {
 	if err := encoder.Encode(res); err != nil {
 		return fmt.Errorf("failed to encode daemon response: %w", err)
 	}
@@ -89,24 +89,24 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 
 	hostname, err := registry.NormalizeHostname(name)
 	if err != nil {
-		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
+		return respond(encoder, &Response{OK: false, Error: err.Error()})
 	}
 	if port <= 0 {
-		return sendResponse(encoder, &Response{OK: false, Error: "port is required"})
+		return respond(encoder, &Response{OK: false, Error: "port is required"})
 	}
 	if pid == -1 {
 		// User-managed alias: no processes to watch. Tolerate wrapper 0
 		// from older clients.
 		if wrapperPID != -1 && wrapperPID != 0 {
-			return sendResponse(encoder, &Response{OK: false, Error: "wrapper pid must be -1 for aliases"})
+			return respond(encoder, &Response{OK: false, Error: "wrapper pid must be -1 for aliases"})
 		}
 		wrapperPID = -1
 	} else {
 		if pid <= 0 { // pid == -1 --> Custom alias
-			return sendResponse(encoder, &Response{OK: false, Error: "pid is invalid"})
+			return respond(encoder, &Response{OK: false, Error: "pid is invalid"})
 		}
 		if wrapperPID <= 0 {
-			return sendResponse(encoder, &Response{OK: false, Error: "wrapper pid is invalid"})
+			return respond(encoder, &Response{OK: false, Error: "wrapper pid is invalid"})
 		}
 	}
 
@@ -139,24 +139,24 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 	}
 
 	if err := store.Add(*newRoute); err != nil {
-		return sendResponse(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to add route: %v", err)})
+		return respond(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to add route: %v", err)})
 	}
 	log.Printf("Added %v\n", newRoute)
-	return sendResponse(encoder, &Response{OK: true})
+	return respond(encoder, &Response{OK: true})
 }
 
 func handleAliasRemove(encoder *json.Encoder, store *registry.Store, req *Request, onRemove func(hostname string)) error {
 	hostname, err := registry.NormalizeHostname(req.Hostname)
 	if err != nil {
-		return sendResponse(encoder, &Response{OK: false, Error: err.Error()})
+		return respond(encoder, &Response{OK: false, Error: err.Error()})
 	}
 
 	if err := store.Remove(hostname); err != nil {
-		return sendResponse(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to remove '%s' route: %v", hostname, err)})
+		return respond(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to remove '%s' route: %v", hostname, err)})
 	}
 	if onRemove != nil {
 		onRemove(hostname)
 	}
 	log.Printf("Removed: %s\n", hostname)
-	return sendResponse(encoder, &Response{OK: true})
+	return respond(encoder, &Response{OK: true})
 }

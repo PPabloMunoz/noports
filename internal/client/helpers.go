@@ -32,6 +32,7 @@ const (
 	stopPollEvery   = 100 * time.Millisecond
 )
 
+// PrintRoutesTable prints routes as a NAME/HOST/PORT/PID table. It prints a hint when empty instead of an empty table.
 func PrintRoutesTable(routes []registry.Route) {
 	if len(routes) == 0 {
 		Info("No routes registered. Run `noports run --name <name> -- <command>` to add one.\n")
@@ -49,10 +50,9 @@ func PrintRoutesTable(routes []registry.Route) {
 	_ = w.Flush()
 }
 
-// IsDaemonRunning checks if a daemon process is running by checking
-// if can connect to the socket
+// IsDaemonRunning reports whether the daemon accepts control-socket connections. It dials the socket and closes immediately without sending a request.
 func IsDaemonRunning() (bool, error) {
-	socketPath := paths.GetSocketPath()
+	socketPath := paths.Socket()
 
 	conn, err := net.Dial("unix", socketPath)
 	if err == nil {
@@ -62,7 +62,8 @@ func IsDaemonRunning() (bool, error) {
 	return false, nil
 }
 
-func StartProxy() error {
+// StartDaemon launches the daemon subprocess and waits for readiness. It passes a pipe as fd 3 so the child signals once the control socket is listening.
+func StartDaemon() error {
 	r, w, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("failed to create pipe: %w", err)
@@ -72,7 +73,7 @@ func StartProxy() error {
 	cmd := exec.Command(os.Args[0], "daemon")
 	cmd.ExtraFiles = []*os.File{w}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start proxy: %w", err)
+		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 	_ = w.Close()
 
@@ -100,16 +101,13 @@ func StartProxy() error {
 	return nil
 }
 
-// StopProxy signals the daemon and waits until it has released the pidfile
-// and control socket. It uses the socket dial (same test as IsDaemonRunning
-// and ipc.Listen) to decide liveness, and only the pidfile to find the
-// process to signal.
-func StopProxy() error {
-	pidFilePath, err := paths.GetPIDFilePath()
+// StopDaemon signals the daemon and waits until it releases the pidfile and control socket. It uses the socket dial to decide liveness and only the pidfile to find the process.
+func StopDaemon() error {
+	pidFilePath, err := paths.PIDFile()
 	if err != nil {
 		return err
 	}
-	socketPath := paths.GetSocketPath()
+	socketPath := paths.Socket()
 
 	pidBytes, readErr := os.ReadFile(pidFilePath)
 	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
@@ -160,16 +158,16 @@ func StopProxy() error {
 }
 
 // waitForShutdown blocks until the daemon has released everything a new
-// instance needs (pidfile + control socket), so a StartProxy right after
-// StopProxy cannot race the old instance's graceful shutdown. pid detects an
+// instance needs (pidfile + control socket), so a StartDaemon right after
+// StopDaemon cannot race the old instance's graceful shutdown. pid detects an
 // unclean death (e.g. kill -9): nothing will ever clean up then, so stale
 // files are reaped here instead.
 func waitForShutdown(pid int) error {
-	pidFilePath, err := paths.GetPIDFilePath()
+	pidFilePath, err := paths.PIDFile()
 	if err != nil {
 		return err
 	}
-	socketPath := paths.GetSocketPath()
+	socketPath := paths.Socket()
 
 	deadline := time.Now().Add(stopGracePeriod)
 	for {
@@ -194,7 +192,7 @@ func waitForShutdown(pid int) error {
 		}
 
 		if time.Now().After(deadline) {
-			logPath, _ := paths.GetLogFilePath()
+			logPath, _ := paths.LogFile()
 			return fmt.Errorf("timed out after %v waiting for daemon (pid %d) to stop; see %s", stopGracePeriod, pid, logPath)
 		}
 		time.Sleep(stopPollEvery)
@@ -224,10 +222,8 @@ func pidAlive(pid int) bool {
 	return registry.ProcessAlive(pid)
 }
 
-// GetRandomPort asks the OS for a free loopback port by binding
-// 127.0.0.1:0. Callers must still handle the bind-then-use race: the port
-// is released on return and could be taken before the child binds it.
-func GetRandomPort() (int, error) {
+// FreeLoopbackPort asks the OS for a free loopback port by binding 127.0.0.1:0. Callers must handle the bind-then-use race since the port is released on return.
+func FreeLoopbackPort() (int, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, fmt.Errorf("could not find free port: %w", err)
@@ -240,9 +236,8 @@ func GetRandomPort() (int, error) {
 	return addr.Port, nil
 }
 
-// SetEnv returns env with key set to value, replacing any existing entry
-// instead of appending a duplicate.
-func SetEnv(env []string, key, value string) []string {
+// SetEnvVar returns env with key set to value, replacing any existing entry instead of appending a duplicate.
+func SetEnvVar(env []string, key, value string) []string {
 	prefix := key + "="
 	for i, kv := range env {
 		if strings.HasPrefix(kv, prefix) {
@@ -253,8 +248,9 @@ func SetEnv(env []string, key, value string) []string {
 	return append(env, prefix+value)
 }
 
-func CleanUpCommand(command *exec.Cmd, name string, res *ipc.Response) error {
-	conn, err := ConnectToSocket()
+// RemoveRunRoute unregisters the run route for name when the child exits. It dials the daemon and sends an alias-remove request.
+func RemoveRunRoute(command *exec.Cmd, name string, res *ipc.Response) error {
+	conn, err := ipc.Dial()
 	if err != nil {
 		_ = command.Process.Signal(os.Interrupt)
 		return err
@@ -265,37 +261,40 @@ func CleanUpCommand(command *exec.Cmd, name string, res *ipc.Response) error {
 	decoder := json.NewDecoder(conn)
 
 	req := &ipc.Request{Command: ipc.CmdAliasRemove, Hostname: name}
-	if err := SendRequest(encoder, req); err != nil {
+	if err := Send(encoder, req); err != nil {
 		return err
 	}
-	if err := GetResponse(decoder, res); err != nil {
+	if err := Receive(decoder, res); err != nil {
 		return err
 	}
 	return nil
 }
 
+// Success prints a green SUCCESS message to stdout. It formats the message before printing and respects color settings.
 func Success(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
 	fmt.Printf("%s %s", paint(ColorGreen, "[SUCCESS]"), msg)
 }
 
+// Info prints a blue INFO message to stdout. It formats the message before printing and respects color settings.
 func Info(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
 	fmt.Printf("%s %s", paint(ColorBlue, "[INFO]"), msg)
 }
 
+// Warning prints a yellow WARN message to stdout. It formats the message before printing and respects color settings.
 func Warning(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
 	fmt.Printf("%s %s", paint(ColorYellow, "[WARN]"), msg)
 }
 
+// Error prints a red ERROR message to stdout. It formats the message before printing and respects color settings.
 func Error(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
 	fmt.Printf("%s %s", paint(ColorRed, "[ERROR]"), msg)
 }
 
-// paint wraps s in ANSI color codes, or returns it plain when colors are
-// disabled (piped output, NO_COLOR, or dumb terminal).
+// paint wraps s in ANSI color codes, or returns it plain when colors are disabled.
 func paint(color, s string) string {
 	if !colorEnabled() {
 		return s
@@ -303,8 +302,7 @@ func paint(color, s string) string {
 	return color + s + ColorReset
 }
 
-// colorEnabled reports whether ANSI colors may be emitted: stdout must be a
-// TTY, TERM must not be "dumb", and NO_COLOR must be unset.
+// colorEnabled reports whether ANSI colors may be emitted. It requires a TTY stdout, a non-dumb TERM, and an unset NO_COLOR.
 func colorEnabled() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false

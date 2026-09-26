@@ -7,10 +7,9 @@ import (
 	"github.com/ppablomunoz/noports/internal/registry"
 )
 
-// ListRoutes queries the daemon over the control socket without starting it.
-// Callers that want the daemon up first should call EnsureProxy beforehand.
+// ListRoutes queries the daemon over the control socket without starting it. Callers that want the daemon up first should call EnsureProxy beforehand.
 func ListRoutes() ([]registry.Route, error) {
-	conn, err := ConnectToSocket()
+	conn, err := ipc.Dial()
 	if err != nil {
 		return nil, err
 	}
@@ -20,17 +19,17 @@ func ListRoutes() ([]registry.Route, error) {
 	decoder := json.NewDecoder(conn)
 
 	req := &ipc.Request{Command: ipc.CmdList}
-	if err := SendRequest(encoder, req); err != nil {
+	if err := Send(encoder, req); err != nil {
 		return nil, err
 	}
 
 	var res ipc.Response
-	if err := GetResponse(decoder, &res); err != nil {
+	if err := Receive(decoder, &res); err != nil {
 		return nil, err
 	}
 
 	var data ipc.DataResponseList
-	if err := GetDataList(&res.Data, &data); err != nil {
+	if err := DecodeListResponse(&res.Data, &data); err != nil {
 		return nil, err
 	}
 

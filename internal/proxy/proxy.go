@@ -40,16 +40,13 @@ type cachedProxy struct {
 // Values are read-only after Store and safe for concurrent use.
 var reverseProxies sync.Map // hostname -> cachedProxy
 
-// Invalidate drops the cached reverse proxy for hostname, if any.
-// Called on route remove/prune so a re-added name never reuses a stale port.
-func Invalidate(hostname string) {
+// InvalidateHost drops the cached reverse proxy for hostname, if any. Called on route remove or prune so a re-added name never reuses a stale port.
+func InvalidateHost(hostname string) {
 	key := strings.ToLower(strings.TrimSpace(hostname))
 	reverseProxies.Delete(key)
 }
 
-// getOrCreateProxy returns the cached proxy for host/port, building and
-// caching it on miss or when the backend port changed. Concurrent callers
-// may build duplicates; the last Store wins and both are functional.
+// getOrCreateProxy returns the cached proxy for host and port, building it on miss or port change. Concurrent callers may build duplicates; the last Store wins and both are functional.
 func getOrCreateProxy(host string, port int) *httputil.ReverseProxy {
 	if v, ok := reverseProxies.Load(host); ok {
 		if cp, ok := v.(cachedProxy); ok && cp.proxy != nil && cp.port == port {
@@ -74,9 +71,7 @@ func getOrCreateProxy(host string, port int) *httputil.ReverseProxy {
 	return proxy
 }
 
-// StartProxyServer starts the HTTPS reverse proxy.
-// certFile/keyFile are the default leaf cert (for "server"); SNI selection uses getCertificate.
-// dashboard serves "localhost" and loopback IPs; if nil, those return 404.
+// StartProxyServer starts the HTTPS reverse proxy. certFile and keyFile supply the default leaf cert while SNI selection uses getCertificate; dashboard serves localhost and loopback IPs, or 404s them when nil.
 func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error), certFile, keyFile string, dashboard http.Handler, errCh chan<- error) (*http.Server, error) {
 	if addr == "" {
 		addr = DefaultProxyAddr
@@ -89,9 +84,9 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			host := normalizeHost(r.Host)
+			host := hostOnly(r.Host)
 
-			if host == "localhost" || isLoopbackHost(host) {
+			if host == "localhost" || isLoopback(host) {
 				if dashboard == nil {
 					http.NotFound(w, r)
 					return
@@ -109,10 +104,9 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 			getOrCreateProxy(host, port).ServeHTTP(w, r)
 		}),
 		TLSConfig: &tls.Config{
-			MinVersion:               tls.VersionTLS12,
-			GetCertificate:           getCertificate,
-			PreferServerCipherSuites: true,
-			CurvePreferences:         []tls.CurveID{tls.X25519, tls.CurveP256},
+			MinVersion:       tls.VersionTLS12,
+			GetCertificate:   getCertificate,
+			CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
 		},
 	}
 
@@ -125,7 +119,7 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 	return srv, nil
 }
 
-func normalizeHost(hostport string) string {
+func hostOnly(hostport string) string {
 	host := hostport
 	if h, _, err := net.SplitHostPort(hostport); err == nil {
 		host = h
@@ -133,7 +127,7 @@ func normalizeHost(hostport string) string {
 	return strings.ToLower(strings.TrimSpace(host))
 }
 
-func isLoopbackHost(host string) bool {
+func isLoopback(host string) bool {
 	h := strings.Trim(strings.TrimSpace(host), "[]")
 	if ip := net.ParseIP(h); ip != nil {
 		return ip.IsLoopback()

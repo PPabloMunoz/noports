@@ -30,7 +30,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		pidInfo := "unknown"
-		if pidFilePath, err := paths.GetPIDFilePath(); err == nil {
+		if pidFilePath, err := paths.PIDFile(); err == nil {
 			if b, err := os.ReadFile(pidFilePath); err == nil {
 				if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
 					state := "dead"
@@ -47,9 +47,9 @@ var statusCmd = &cobra.Command{
 			routes = strconv.Itoa(len(list))
 		}
 
-		logPath, _ := paths.GetLogFilePath()
+		logPath, _ := paths.LogFile()
 		client.Success("Daemon running (pid %s)\n", pidInfo)
-		client.Info("Socket: %s\n", paths.GetSocketPath())
+		client.Info("Socket: %s\n", paths.Socket())
 		client.Info("Routes: %s\n", routes)
 		client.Info("Log: %s\n", logPath)
 		return nil

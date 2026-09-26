@@ -29,7 +29,7 @@ var getCmd = &cobra.Command{
 			return err
 		}
 
-		conn, err := client.ConnectToSocket()
+		conn, err := ipc.Dial()
 		if err != nil {
 			return err
 		}
@@ -39,17 +39,17 @@ var getCmd = &cobra.Command{
 		decoder := json.NewDecoder(conn)
 
 		req := &ipc.Request{Command: ipc.CmdGet, Hostname: hostname}
-		if err := client.SendRequest(encoder, req); err != nil {
+		if err := client.Send(encoder, req); err != nil {
 			return err
 		}
 
 		var res ipc.Response
-		if err := client.GetResponse(decoder, &res); err != nil {
+		if err := client.Receive(decoder, &res); err != nil {
 			return err
 		}
 
 		var data ipc.DataResponseGet
-		if err := client.GetDataGet(&res.Data, &data); err != nil {
+		if err := client.DecodeGetResponse(&res.Data, &data); err != nil {
 			return err
 		}
 

@@ -11,7 +11,7 @@ import (
 // Listen creates the unix socket listener, removing a stale socket file.
 // It dials first to refuse starting a second daemon.
 func Listen() (net.Listener, error) {
-	socketPath := paths.GetSocketPath()
+	socketPath := paths.Socket()
 
 	conn, err := net.Dial("unix", socketPath)
 	if err == nil {
@@ -33,5 +33,5 @@ func Listen() (net.Listener, error) {
 
 // Dial connects to the running daemon.
 func Dial() (net.Conn, error) {
-	return net.Dial("unix", paths.GetSocketPath())
+	return net.Dial("unix", paths.Socket())
 }
