@@ -2,7 +2,9 @@ package ipc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 
@@ -20,6 +22,10 @@ func HandleConnection(conn net.Conn, store *registry.Store, onRemove func(hostna
 
 	var req Request
 	if err := decoder.Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			// Probe dial (e.g. IsDaemonRunning) closed without a request.
+			return
+		}
 		log.Printf("[ERROR] failed to decode request to socket: %v\n", err)
 		return
 	}
