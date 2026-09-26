@@ -17,7 +17,7 @@ type LookupPort func(host string) (port int, ok bool)
 
 // StartProxyServer starts the HTTPS reverse proxy.
 // certFile/keyFile are the default leaf cert (for "server"); SNI selection uses getCertificate.
-// dashboard serves the "localhost" host; if nil, localhost returns 404.
+// dashboard serves "localhost" and loopback IPs; if nil, those return 404.
 func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error), certFile, keyFile string, dashboard http.Handler, errCh chan<- error) (*http.Server, error) {
 	if addr == "" {
 		addr = DefaultProxyAddr
@@ -27,7 +27,7 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			host := normalizeHost(r.Host)
 
-			if host == "localhost" {
+			if host == "localhost" || isLoopbackHost(host) {
 				if dashboard == nil {
 					http.NotFound(w, r)
 					return
@@ -48,6 +48,10 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 			}
 
 			proxy := httputil.NewSingleHostReverseProxy(target)
+			proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+				log.Printf("backend for %s on localhost:%d failed: %v", host, port, err)
+				http.Error(w, fmt.Sprintf("backend for %s is not reachable on localhost:%d — is it listening on PORT? (%v)", host, port, err), http.StatusBadGateway)
+			}
 			proxy.ServeHTTP(w, r)
 		}),
 		TLSConfig: &tls.Config{
@@ -71,4 +75,12 @@ func normalizeHost(hostport string) string {
 		host = h
 	}
 	return strings.ToLower(strings.TrimSpace(host))
+}
+
+func isLoopbackHost(host string) bool {
+	h := strings.Trim(strings.TrimSpace(host), "[]")
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
