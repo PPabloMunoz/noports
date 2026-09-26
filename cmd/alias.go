@@ -66,7 +66,7 @@ var aliasCmd = &cobra.Command{
 			return fmt.Errorf("invalid port")
 		}
 
-		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: -1}
+		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: -1, WrapperPID: -1}
 		if err := client.SendRequest(encoder, req); err != nil {
 			return err
 		}

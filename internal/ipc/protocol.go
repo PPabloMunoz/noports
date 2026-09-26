@@ -18,6 +18,13 @@ type Request struct {
 	Hostname  string  `json:"hostname,omitempty"`
 	LocalPort int     `json:"local_port,omitempty"`
 	PID       int     `json:"pid,omitempty"`
+	// WrapperPID is the `run` wrapper process owning the route (-1 for
+	// user-managed aliases, 0 when sent by older clients).
+	WrapperPID int `json:"wrapper_pid,omitempty"`
+	// ChildStartTime/WrapperStartTime are the wall-clock start times
+	// (Unix ms) of PID/WrapperPID for PID-reuse detection; 0 = unknown.
+	ChildStartTime   int64 `json:"child_start_time,omitempty"`
+	WrapperStartTime int64 `json:"wrapper_start_time,omitempty"`
 }
 
 // Response is the daemon reply.

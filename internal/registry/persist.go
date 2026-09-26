@@ -36,6 +36,18 @@ func Load(s *Store) error {
 	}
 
 	s.FirstLoad(routes)
+
+	// Self-heal routes leaked by abnormally-terminated `run` wrappers
+	// (kill -9, hangup, crash): their PIDs are dead but nothing ever sent
+	// alias_remove. Persist once if anything was pruned.
+	if pruned := s.Prune(RouteAlive); len(pruned) > 0 {
+		for _, r := range pruned {
+			log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
+		}
+		if err := Save(s); err != nil {
+			return fmt.Errorf("failed to persist pruned routes: %w", err)
+		}
+	}
 	return nil
 }
 

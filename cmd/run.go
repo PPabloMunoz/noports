@@ -26,7 +26,7 @@ var runCmd = &cobra.Command{
 	Short: "Run an app",
 	Example: `  noports run --name web -- python3 -m http.server
   noports run --name web --port-arg -- astro dev`,
-	Args:  cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := cmd.Flags().GetString("name")
 		if err != nil {
@@ -102,7 +102,14 @@ var runCmd = &cobra.Command{
 		encoder := json.NewEncoder(conn)
 		decoder := json.NewDecoder(conn)
 
-		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: command.Process.Pid}
+		wrapperPID := os.Getpid()
+		// Record both start times immediately so the daemon's orphan sweep
+		// can tell PID reuse apart from the original processes. A lookup
+		// failure just stores 0 ("unknown"); the daemon backfills on receipt
+		// and the sweep falls back to a liveness-only check.
+		childStart, _ := registry.ProcessStartTime(command.Process.Pid)
+		wrapperStart, _ := registry.ProcessStartTime(wrapperPID)
+		req := &ipc.Request{Command: ipc.CmdAliasAdd, Hostname: hostname, LocalPort: port, PID: command.Process.Pid, WrapperPID: wrapperPID, ChildStartTime: childStart, WrapperStartTime: wrapperStart}
 		if err := client.SendRequest(encoder, req); err != nil {
 			_ = command.Process.Signal(os.Interrupt)
 			return err

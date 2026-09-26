@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -174,7 +173,7 @@ func waitForShutdown(pid int) error {
 			return nil
 		}
 
-		if !processAlive(pid) {
+		if !pidAlive(pid) {
 			// The daemon died without cleaning up: remove stale leftovers so
 			// the next start finds a clean state.
 			if err := os.Remove(pidFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -214,15 +213,11 @@ func fileGone(path string) bool {
 	return errors.Is(err, os.ErrNotExist)
 }
 
-// processAlive reports whether pid names a live process. Note signal 0 cannot
+// pidAlive reports whether pid names a live process. Note signal 0 cannot
 // distinguish PID reuse; callers treat file/socket state
 // as the primary evidence and liveness only as a fallback.
-func processAlive(pid int) bool {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
+func pidAlive(pid int) bool {
+	return registry.ProcessAlive(pid)
 }
 
 func randomNum() int {

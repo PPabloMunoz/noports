@@ -8,10 +8,20 @@ import (
 )
 
 // Route maps a hostname to a local backend port.
+//
+// PID is the backend child process for `run` routes, or -1 for user-managed
+// `alias` routes (no process to watch). WrapperPID is the `run` wrapper
+// process that owns the route's lifecycle (-1 for aliases, 0 when recorded
+// before wrapper PIDs existed). ChildStartTime/WrapperStartTime are the
+// wall-clock start times (Unix ms, see ProcessStartTime) used to detect PID
+// reuse; 0 means unknown.
 type Route struct {
-	Hostname string `json:"hostname"`
-	Port     int    `json:"port"`
-	PID      int    `json:"PID"`
+	Hostname         string `json:"hostname"`
+	Port             int    `json:"port"`
+	PID              int    `json:"PID"`
+	WrapperPID       int    `json:"wrapper_pid,omitempty"`
+	ChildStartTime   int64  `json:"child_start_time,omitempty"`
+	WrapperStartTime int64  `json:"wrapper_start_time,omitempty"`
 }
 
 // Store is a concurrency-safe in-memory route table.
@@ -102,4 +112,47 @@ func (s *Store) Remove(hostname string) error {
 	delete(s.routes, normalized)
 	s.mu.Unlock()
 	return Save(s)
+}
+
+// Prune removes orphaned `run` routes: entries whose recorded processes are
+// gone according to isAlive (pass RouteAlive in production; inject a fake in
+// tests). Aliases (PID == -1) are user-managed and never pruned.
+//
+// The liveness probe runs on a snapshot without holding the lock (no syscalls
+// under the mutex); deletion is compare-and-delete so a route re-added under
+// the same hostname while sweeping is left alone.
+//
+// Prune is in-memory only: callers must persist with Save when it returns a
+// non-empty slice.
+func (s *Store) Prune(isAlive func(Route) bool) []Route {
+	snapshot := s.List()
+	var dead []Route
+	for _, r := range snapshot {
+		if r.PID == -1 {
+			continue
+		}
+		if isAlive(r) {
+			continue
+		}
+		dead = append(dead, r)
+	}
+	if len(dead) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	var removed []Route
+	for _, r := range dead {
+		cur, ok := s.routes[r.Hostname]
+		if !ok {
+			continue
+		}
+		if cur.PID != r.PID || cur.WrapperPID != r.WrapperPID ||
+			cur.ChildStartTime != r.ChildStartTime || cur.WrapperStartTime != r.WrapperStartTime {
+			continue
+		}
+		delete(s.routes, r.Hostname)
+		removed = append(removed, r)
+	}
+	s.mu.Unlock()
+	return removed
 }

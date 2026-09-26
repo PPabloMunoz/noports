@@ -32,6 +32,10 @@ type Config struct {
 	DashboardTemplate *template.Template
 }
 
+// orphanSweepInterval is how often the daemon reaps `run` routes whose
+// wrapper or child died without unregistering.
+const orphanSweepInterval = 30 * time.Second
+
 // Run starts the daemon: dirs/PID, CA, routes, HTTP(S) servers and IPC socket.
 // It blocks until ctx is cancelled, a shutdown signal arrives, or a server fails.
 func Run(ctx context.Context, cfg Config) error {
@@ -145,6 +149,35 @@ func Run(ctx context.Context, cfg Config) error {
 				continue
 			}
 			go ipc.HandleConnection(conn, store)
+		}
+	}()
+
+	// Periodically reap `run` routes whose wrapper or child died without
+	// unregistering (kill -9, hangup, crash). Strict rule: a run route lives
+	// exactly as long as its run session, so a dead wrapper frees the name
+	// even if the orphaned child still listens. Aliases (PID -1) are never
+	// touched.
+	sweepDone := make(chan struct{})
+	defer close(sweepDone)
+	go func() {
+		ticker := time.NewTicker(orphanSweepInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				pruned := store.Prune(registry.RouteAlive)
+				if len(pruned) == 0 {
+					continue
+				}
+				for _, r := range pruned {
+					log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
+				}
+				if err := registry.Save(store); err != nil {
+					log.Printf("failed to persist pruned routes: %v", err)
+				}
+			case <-sweepDone:
+				return
+			}
 		}
 	}()
 

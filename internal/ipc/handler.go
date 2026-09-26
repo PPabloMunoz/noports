@@ -77,6 +77,7 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 	name := req.Hostname
 	port := req.LocalPort
 	pid := req.PID
+	wrapperPID := req.WrapperPID
 
 	hostname, err := registry.NormalizeHostname(name)
 	if err != nil {
@@ -85,11 +86,49 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 	if port <= 0 {
 		return sendResponse(encoder, &Response{OK: false, Error: "port is required"})
 	}
-	if pid == 0 { // pid == -1 --> Custom alias
-		return sendResponse(encoder, &Response{OK: false, Error: "pid is invalid"})
+	if pid == -1 {
+		// User-managed alias: no processes to watch. Tolerate wrapper 0
+		// from older clients.
+		if wrapperPID != -1 && wrapperPID != 0 {
+			return sendResponse(encoder, &Response{OK: false, Error: "wrapper pid must be -1 for aliases"})
+		}
+		wrapperPID = -1
+	} else {
+		if pid <= 0 { // pid == -1 --> Custom alias
+			return sendResponse(encoder, &Response{OK: false, Error: "pid is invalid"})
+		}
+		if wrapperPID <= 0 {
+			return sendResponse(encoder, &Response{OK: false, Error: "wrapper pid is invalid"})
+		}
 	}
 
-	newRoute := &registry.Route{Hostname: hostname, Port: port, PID: pid}
+	childStart := req.ChildStartTime
+	wrapperStart := req.WrapperStartTime
+	if pid == -1 {
+		childStart, wrapperStart = 0, 0
+	} else {
+		// Backfill start times the client could not determine so PID
+		// reuse is still detectable on later sweeps.
+		if childStart == 0 {
+			if st, err := registry.ProcessStartTime(pid); err == nil {
+				childStart = st
+			}
+		}
+		if wrapperStart == 0 {
+			if st, err := registry.ProcessStartTime(wrapperPID); err == nil {
+				wrapperStart = st
+			}
+		}
+	}
+
+	newRoute := &registry.Route{
+		Hostname:         hostname,
+		Port:             port,
+		PID:              pid,
+		WrapperPID:       wrapperPID,
+		ChildStartTime:   childStart,
+		WrapperStartTime: wrapperStart,
+	}
 
 	if err := store.Add(*newRoute); err != nil {
 		return sendResponse(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to add route: %v", err)})
