@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "noports",
 	Short: "A lightweight reverse proxy CLI that maps local development ports to clean, persistent .localhost domains with automatic HTTPS.",
@@ -29,8 +28,7 @@ CORS quirks, and credential sync issues across concurrent projects.
 	},
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
+// Execute runs the root command and exits nonzero on error. It is called once by main.main.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -38,7 +36,4 @@ func Execute() {
 	}
 }
 
-func init() {
-	// Flags
-	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-}
+func init() {}

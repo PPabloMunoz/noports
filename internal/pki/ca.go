@@ -18,7 +18,7 @@ import (
 	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-// EnsureCA generates the local CA if missing and installs it into the OS trust store.
+// EnsureCA generates the local CA when missing and installs it into the OS trust store. It rotates expiring CAs and drops stale leafs so they are re-issued on demand.
 func EnsureCA() error {
 	if err := paths.EnsureDirs(); err != nil {
 		return err

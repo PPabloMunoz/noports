@@ -20,7 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run [flags] -- <command> [args...]",
 	Short: "Run an app",

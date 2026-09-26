@@ -9,6 +9,7 @@ import (
 	"os/exec"
 )
 
+// IsCATrusted reports whether the local CA is installed in the macOS trust store. It returns false without an error when the CA file is missing or no anchor matches it.
 func IsCATrusted() (bool, error) {
 	certPath, err := GetCACertPath()
 	if err != nil {
@@ -30,6 +31,7 @@ func IsCATrusted() (bool, error) {
 	return bytes.Contains(out, bytes.TrimSpace(caBytes)), nil
 }
 
+// installCA adds the local CA to the macOS trust store. It prompts for sudo since the system keychain is root-owned.
 func installCA() error {
 	certPath, err := GetCACertPath()
 	if err != nil {
@@ -47,7 +49,7 @@ func installCA() error {
 	return nil
 }
 
-// UninstallCA removes the local CA from the macOS trust store.
+// UninstallCA removes the local CA from the macOS trust store. It prompts for sudo since the system keychain is root-owned.
 func UninstallCA() error {
 	cmd := exec.Command("sudo", "security", "delete-certificate", "-t", "-c", CASubjectName)
 	cmd.Stderr = os.Stderr

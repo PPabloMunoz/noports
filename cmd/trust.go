@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// trustCmd represents the trust command
 var trustCmd = &cobra.Command{
 	Use:   "trust",
 	Short: "Adds the noports certificate authority to your system trust store. Required once for HTTPS with auto-generated certs",

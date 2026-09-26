@@ -20,7 +20,6 @@ func SetDashboardTemplate(t *template.Template) {
 	dashboardTemplate = t
 }
 
-// daemonCmd represents the daemon command
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
 	Short: "Start the noports daemon (HTTPS proxy, redirect and control socket)",

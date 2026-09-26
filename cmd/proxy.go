@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// proxyCmd represents the proxy command
 var proxyCmd = &cobra.Command{
 	Use:       "proxy <start|stop>",
 	Short:     "Start and stop proxy daemon",

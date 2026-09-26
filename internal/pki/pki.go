@@ -16,9 +16,10 @@ import (
 const (
 	// CASubjectName is the CommonName of the local root CA.
 	CASubjectName = "Noports Local CA"
-	// CACertFile and CAKeyFile are file names inside the certs dir.
+	// CACertFile is the CA certificate filename inside the certs dir.
 	CACertFile = "ca.pem"
-	CAKeyFile  = "ca-key.pem"
+	// CAKeyFile is the CA private key filename inside the certs dir.
+	CAKeyFile = "ca-key.pem"
 	// leafRenewBeforeExpiry renews 3-month leafs when under 30 days remain.
 	leafRenewBeforeExpiry = 30 * 24 * time.Hour
 	// caRenewBeforeExpiry rotates the 10-year CA when under 90 days remain.

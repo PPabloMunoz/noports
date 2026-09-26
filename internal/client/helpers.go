@@ -18,11 +18,11 @@ import (
 )
 
 const (
-	ColorReset  = "\033[0m"
-	ColorRed    = "\033[31m"
-	ColorGreen  = "\033[32m"
-	ColorYellow = "\033[33m"
-	ColorBlue   = "\033[34m"
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
 )
 
 const (
@@ -273,25 +273,25 @@ func RemoveRunRoute(command *exec.Cmd, name string, res *ipc.Response) error {
 // Success prints a green SUCCESS message to stdout. It formats the message before printing and respects color settings.
 func Success(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(ColorGreen, "[SUCCESS]"), msg)
+	fmt.Printf("%s %s", paint(colorGreen, "[SUCCESS]"), msg)
 }
 
 // Info prints a blue INFO message to stdout. It formats the message before printing and respects color settings.
 func Info(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(ColorBlue, "[INFO]"), msg)
+	fmt.Printf("%s %s", paint(colorBlue, "[INFO]"), msg)
 }
 
 // Warning prints a yellow WARN message to stdout. It formats the message before printing and respects color settings.
 func Warning(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(ColorYellow, "[WARN]"), msg)
+	fmt.Printf("%s %s", paint(colorYellow, "[WARN]"), msg)
 }
 
 // Error prints a red ERROR message to stdout. It formats the message before printing and respects color settings.
 func Error(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(ColorRed, "[ERROR]"), msg)
+	fmt.Printf("%s %s", paint(colorRed, "[ERROR]"), msg)
 }
 
 // paint wraps s in ANSI color codes, or returns it plain when colors are disabled.
@@ -299,7 +299,7 @@ func paint(color, s string) string {
 	if !colorEnabled() {
 		return s
 	}
-	return color + s + ColorReset
+	return color + s + colorReset
 }
 
 // colorEnabled reports whether ANSI colors may be emitted. It requires a TTY stdout, a non-dumb TERM, and an unset NO_COLOR.

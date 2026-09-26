@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// aliasCmd represents the alias command
 var aliasCmd = &cobra.Command{
 	Use:   "alias",
 	Short: "Point a .localhost hostname at a local port",

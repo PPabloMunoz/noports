@@ -14,13 +14,10 @@ import (
 	"time"
 )
 
-// LookupPort resolves a hostname to a backend local port.
-// Implemented by internal/app using registry.Store; injected to keep proxy decoupled.
+// LookupPort resolves a hostname to a backend local port. It is implemented by internal/app and injected to keep proxy decoupled.
 type LookupPort func(host string) (port int, ok bool)
 
-// backendTransport is shared by all cached reverse proxies so backend
-// keep-alive connections are reused across requests instead of opening
-// (and closing) a new TCP connection per request.
+// backendTransport is shared by all cached reverse proxies so backend keep-alive connections are reused across requests.
 var backendTransport = &http.Transport{
 	MaxIdleConns:          100,
 	MaxIdleConnsPerHost:   20,
@@ -29,15 +26,13 @@ var backendTransport = &http.Transport{
 	ExpectContinueTimeout: 1 * time.Second,
 }
 
-// cachedProxy pairs a built reverse proxy with the backend port it dials.
-// If the route's port changes the entry is rebuilt on next hit.
+// cachedProxy pairs a built reverse proxy with the backend port it dials. Entries are rebuilt when the route port changes.
 type cachedProxy struct {
 	port  int
 	proxy *httputil.ReverseProxy
 }
 
-// reverseProxies caches one *httputil.ReverseProxy per normalized hostname.
-// Values are read-only after Store and safe for concurrent use.
+// reverseProxies caches one reverse proxy per normalized hostname. Values are read-only after Store and safe for concurrent use.
 var reverseProxies sync.Map // hostname -> cachedProxy
 
 // InvalidateHost drops the cached reverse proxy for hostname, if any. Called on route remove or prune so a re-added name never reuses a stale port.

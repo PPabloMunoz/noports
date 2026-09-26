@@ -6,9 +6,13 @@ import "github.com/ppablomunoz/noports/internal/registry"
 type Command string
 
 const (
-	CmdGet         Command = "get"
-	CmdList        Command = "list"
-	CmdAliasAdd    Command = "alias_add"
+	// CmdGet fetches a single route by hostname.
+	CmdGet Command = "get"
+	// CmdList returns all routes.
+	CmdList Command = "list"
+	// CmdAliasAdd registers a hostname-to-port mapping.
+	CmdAliasAdd Command = "alias_add"
+	// CmdAliasRemove unregisters a hostname.
 	CmdAliasRemove Command = "alias_remove"
 )
 

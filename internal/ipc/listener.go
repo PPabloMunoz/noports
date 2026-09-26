@@ -8,8 +8,7 @@ import (
 	"github.com/ppablomunoz/noports/internal/paths"
 )
 
-// Listen creates the unix socket listener, removing a stale socket file.
-// It dials first to refuse starting a second daemon.
+// Listen creates the control socket listener, removing a stale socket file. It dials first to refuse starting a second daemon.
 func Listen() (net.Listener, error) {
 	socketPath := paths.Socket()
 
@@ -31,7 +30,7 @@ func Listen() (net.Listener, error) {
 	return listener, nil
 }
 
-// Dial connects to the running daemon.
+// Dial connects to the running daemon over the control socket. Callers must close the returned connection when done.
 func Dial() (net.Conn, error) {
 	return net.Dial("unix", paths.Socket())
 }

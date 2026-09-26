@@ -112,16 +112,7 @@ func (s *Store) Remove(hostname string) error {
 	return Save(s)
 }
 
-// Prune removes orphaned `run` routes: entries whose recorded processes are
-// gone according to isAlive (pass RouteAlive in production; inject a fake in
-// tests). Aliases (PID == -1) are user-managed and never pruned.
-//
-// The liveness probe runs on a snapshot without holding the lock (no syscalls
-// under the mutex); deletion is compare-and-delete so a route re-added under
-// the same hostname while sweeping is left alone.
-//
-// Prune is in-memory only: callers must persist with Save when it returns a
-// non-empty slice.
+// Prune removes orphaned run routes whose processes are gone per isAlive. Aliases are never pruned, probing runs lock-free on a snapshot, and deletion is compare-and-delete so re-added routes survive.
 func (s *Store) Prune(isAlive func(Route) bool) []Route {
 	snapshot := s.List()
 	var dead []Route

@@ -26,11 +26,13 @@ import (
 	"github.com/ppablomunoz/noports/internal/registry"
 )
 
-// Config tunes Run. Zero values select defaults.
-// DashboardTemplate renders the "localhost" host; nil means 404.
+// Config tunes Run. Zero values select defaults for addresses and disable the dashboard.
 type Config struct {
-	RedirectAddr      string
-	ProxyAddr         string
+	// RedirectAddr is the HTTP listen address; empty means DefaultRedirectAddr.
+	RedirectAddr string
+	// ProxyAddr is the HTTPS listen address; empty means DefaultProxyAddr.
+	ProxyAddr string
+	// DashboardTemplate renders the localhost host; nil means 404.
 	DashboardTemplate *template.Template
 }
 
@@ -39,15 +41,9 @@ type Config struct {
 const orphanSweepInterval = 30 * time.Second
 
 var (
-	// tlsCerts caches per-hostname leaf certs to avoid file I/O + PEM
-	// parse on every handshake. Keys are normalized hostnames
-	// (see registry.NormalizeHostname). Values are *tls.Certificate,
-	// which is read-only after parsing and safe for concurrent use.
+	// tlsCerts caches per-hostname leaf certs to avoid file I/O on every handshake. Values are read-only after parsing and safe for concurrent use.
 	tlsCerts sync.Map
-	// tlsLocks shards handshake-time cert creation per hostname so
-	// concurrent first handshakes for the same name share one
-	// GetLeafTLSCertificate call instead of racing in
-	// createLeafCertificate. One entry per hostname; bounded.
+	// tlsLocks shards handshake-time cert creation per hostname so concurrent first handshakes share one issuance instead of racing.
 	tlsLocks sync.Map
 )
 

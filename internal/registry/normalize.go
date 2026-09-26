@@ -7,13 +7,7 @@ import (
 
 const localhostSuffix = ".localhost"
 
-// NormalizeHostname accepts a bare name ("api", "API", " api ") or a
-// fully-qualified hostname ("api.localhost", "API.LOCALHOST") and returns
-// the canonical lowercase "name.localhost" form.
-//
-// It rejects empty input, the reserved "localhost" host, multi-label names
-// ("foo.bar"), and anything outside RFC 1035 labels
-// (lowercase alphanumerics and hyphens, 1-63 chars, no leading/trailing hyphen).
+// NormalizeHostname canonicalizes a bare name or fully-qualified hostname to lowercase name.localhost. It rejects empty, reserved, multi-label, and non-RFC-1035 inputs.
 func NormalizeHostname(input string) (string, error) {
 	s := strings.ToLower(strings.TrimSpace(input))
 	s = strings.Trim(s, ".")
