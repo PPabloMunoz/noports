@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 
 	"github.com/ppablomunoz/noports/internal/registry"
@@ -26,7 +26,7 @@ func HandleConnection(conn net.Conn, store *registry.Store, onRemove func(hostna
 			// Probe dial (e.g. IsDaemonRunning) closed without a request.
 			return
 		}
-		log.Printf("[ERROR] failed to decode request to socket: %v\n", err)
+		slog.Warn("failed to decode control request", "err", err)
 		return
 	}
 
@@ -44,7 +44,7 @@ func HandleConnection(conn net.Conn, store *registry.Store, onRemove func(hostna
 		err = respond(encoder, &Response{OK: false, Error: "command is not valid"})
 	}
 	if err != nil {
-		log.Println("[ERROR]", err)
+		slog.Error("failed to respond to control request", "err", err)
 	}
 }
 
@@ -141,7 +141,7 @@ func handleAliasAdd(encoder *json.Encoder, store *registry.Store, req *Request) 
 	if err := store.Add(*newRoute); err != nil {
 		return respond(encoder, &Response{OK: false, Error: fmt.Sprintf("failed to add route: %v", err)})
 	}
-	log.Printf("Added %v\n", newRoute)
+	slog.Info("route added", "hostname", newRoute.Hostname, "port", newRoute.Port)
 	return respond(encoder, &Response{OK: true})
 }
 
@@ -157,6 +157,6 @@ func handleAliasRemove(encoder *json.Encoder, store *registry.Store, req *Reques
 	if onRemove != nil {
 		onRemove(hostname)
 	}
-	log.Printf("Removed: %s\n", hostname)
+	slog.Info("route removed", "hostname", hostname)
 	return respond(encoder, &Response{OK: true})
 }

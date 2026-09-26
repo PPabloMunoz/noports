@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func EnsureCA() error {
 	}
 
 	if caNeedsRotation(certPath, keyPath) {
-		fmt.Println("CA certificate missing, expired, or near expiry — rotating")
+		slog.Info("rotating local CA, missing or near expiry")
 		if err := generateCA(); err != nil {
 			return err
 		}

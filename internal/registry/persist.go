@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/ppablomunoz/noports/internal/paths"
@@ -20,7 +20,7 @@ func (s *Store) Load() error {
 	data, err := os.ReadFile(routesPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Println("routes json file does not exist. Creating it...")
+			slog.Info("routes file missing, creating empty store", "path", routesPath)
 			if err := os.WriteFile(routesPath, []byte("[]"), 0o644); err != nil {
 				return fmt.Errorf("failed to create routes.json: %w", err)
 			}
@@ -81,7 +81,7 @@ func (s *Store) PruneAndPersist(isAlive func(Route) bool) ([]Route, error) {
 		return nil, nil
 	}
 	for _, r := range pruned {
-		log.Printf("pruned orphaned route %s (child pid %d, wrapper pid %d gone)", r.Hostname, r.PID, r.WrapperPID)
+		slog.Info("pruned orphaned route", "hostname", r.Hostname, "child_pid", r.PID, "wrapper_pid", r.WrapperPID)
 	}
 	if err := s.Save(); err != nil {
 		return pruned, fmt.Errorf("failed to persist pruned routes: %w", err)

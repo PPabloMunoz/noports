@@ -1,7 +1,7 @@
 package app
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/ppablomunoz/noports/internal/proxy"
@@ -20,7 +20,7 @@ func sweepOrphans(store *registry.Store) {
 		proxy.InvalidateHost(r.Hostname)
 	}
 	if err != nil {
-		log.Printf("failed to persist pruned routes: %v", err)
+		slog.Warn("failed to persist pruned routes", "err", err)
 	}
 }
 

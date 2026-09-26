@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"path/filepath"
@@ -85,7 +86,7 @@ func issueLeaf(hostname string) error {
 		return err
 	}
 
-	fmt.Printf("leaf certificate created for %s\n", hostname)
+	slog.Info("leaf certificate created", "hostname", hostname)
 	return nil
 }
 
@@ -113,7 +114,7 @@ func GetLeafCertificatePaths(hostname string) (string, string, error) {
 	}
 
 	if paths.Exists(leafCertPath) {
-		fmt.Printf("renewing leaf certificate for %s (expired or near expiry)\n", hostname)
+		slog.Info("renewing leaf certificate, expired or near expiry", "hostname", hostname)
 	}
 	if err := issueLeaf(hostname); err != nil {
 		return "", "", err

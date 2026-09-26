@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 const (
@@ -13,28 +14,29 @@ const (
 	colorBlue   = "\033[34m"
 )
 
-// Success prints a green SUCCESS message to stdout. It formats the message before printing and respects color settings.
+// Success prints a green SUCCESS line to stdout. It owns the trailing newline, so callers pass messages without one.
 func Success(format string, v ...any) {
-	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(colorGreen, "[SUCCESS]"), msg)
+	fmt.Printf("%s %s", paint(colorGreen, "[SUCCESS]"), line(fmt.Sprintf(format, v...)))
 }
 
-// Info prints a blue INFO message to stdout. It formats the message before printing and respects color settings.
+// Info prints a blue INFO line to stdout. It owns the trailing newline, so callers pass messages without one.
 func Info(format string, v ...any) {
-	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(colorBlue, "[INFO]"), msg)
+	fmt.Printf("%s %s", paint(colorBlue, "[INFO]"), line(fmt.Sprintf(format, v...)))
 }
 
-// Warning prints a yellow WARN message to stdout. It formats the message before printing and respects color settings.
+// Warning prints a yellow WARN line to stdout. It owns the trailing newline, so callers pass messages without one.
 func Warning(format string, v ...any) {
-	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(colorYellow, "[WARN]"), msg)
+	fmt.Printf("%s %s", paint(colorYellow, "[WARN]"), line(fmt.Sprintf(format, v...)))
 }
 
-// Error prints a red ERROR message to stdout. It formats the message before printing and respects color settings.
+// Error prints a red ERROR line to stderr. It owns the trailing newline, so callers pass messages without one.
 func Error(format string, v ...any) {
-	msg := fmt.Sprintf(format, v...)
-	fmt.Printf("%s %s", paint(colorRed, "[ERROR]"), msg)
+	fmt.Fprintf(os.Stderr, "%s %s", paint(colorRed, "[ERROR]"), line(fmt.Sprintf(format, v...)))
+}
+
+// line returns s with exactly one trailing newline. It lets helpers own line discipline instead of every caller.
+func line(s string) string {
+	return strings.TrimSuffix(s, "\n") + "\n"
 }
 
 // paint wraps s in ANSI color codes, or returns it plain when colors are disabled.

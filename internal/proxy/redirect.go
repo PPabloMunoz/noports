@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -32,7 +32,7 @@ func StartRedirectServer(addr string, errCh chan<- error) *http.Server {
 	}
 
 	go func() {
-		log.Printf("HTTP redirect server listening on %s", addr)
+		slog.Info("http redirect listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}

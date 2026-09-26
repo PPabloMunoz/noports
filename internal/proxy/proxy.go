@@ -3,7 +3,7 @@ package proxy
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -59,7 +59,7 @@ func getOrCreateProxy(host string, port int) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = backendTransport
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("backend for %s on localhost:%d failed: %v", host, port, err)
+		slog.Warn("backend unreachable", "host", host, "port", port, "err", err)
 		http.Error(w, fmt.Sprintf("backend for %s is not reachable on localhost:%d — is it listening on PORT? (%v)", host, port, err), http.StatusBadGateway)
 	}
 	reverseProxies.Store(host, cachedProxy{port: port, proxy: proxy})
@@ -106,7 +106,7 @@ func StartProxyServer(addr string, lookup LookupPort, getCertificate func(*tls.C
 	}
 
 	go func() {
-		log.Printf("HTTPS proxy server listening on %s", addr)
+		slog.Info("https proxy listening", "addr", addr)
 		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}

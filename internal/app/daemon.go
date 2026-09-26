@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -58,7 +58,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	defer func() { _ = logFile.Close() }()
-	log.SetOutput(logFile)
+	slog.SetDefault(slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	installed, err := pki.IsCATrusted()
 	if err != nil {
@@ -117,7 +117,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Socket listening on %s\n", paths.Socket())
+	slog.Info("control socket listening", "path", paths.Socket())
 
 	onRemove := func(hostname string) {
 		invalidateCachedCert(hostname)
@@ -126,7 +126,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	if readyPipe != nil {
 		if _, err := readyPipe.Write([]byte{1}); err != nil {
-			log.Println("no readiness pipe (likely a manual/foreground run)")
+			slog.Info("no readiness pipe, likely a manual foreground run")
 		}
 		_ = readyPipe.Close()
 	}
@@ -138,7 +138,7 @@ func Run(ctx context.Context, cfg Config) error {
 				if errors.Is(err, net.ErrClosed) {
 					return
 				}
-				log.Printf("failed to accept connection to socket: %v", err)
+				slog.Warn("failed to accept control connection", "err", err)
 				continue
 			}
 			go ipc.HandleConnection(conn, store, onRemove)
@@ -157,11 +157,11 @@ func Run(ctx context.Context, cfg Config) error {
 
 	select {
 	case err := <-errCh:
-		log.Printf("server error: %v\n", err)
+		slog.Error("server error, shutting down", "err", err)
 	case sig := <-stop:
-		log.Printf("received signal: %v, shutting down\n", sig)
+		slog.Info("received signal, shutting down", "signal", sig)
 	case <-ctx.Done():
-		log.Printf("context cancelled, shutting down: %v", ctx.Err())
+		slog.Info("context cancelled, shutting down", "err", ctx.Err())
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -180,6 +180,6 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("failed to remove %s: %w", pidFilePath, err)
 	}
 
-	log.Println("SHUTDOWN COMPLETE")
+	slog.Info("shutdown complete")
 	return nil
 }

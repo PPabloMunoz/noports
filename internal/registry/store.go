@@ -2,7 +2,7 @@ package registry
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"maps"
 	"sync"
 )
@@ -51,12 +51,12 @@ func (s *Store) importRoutes(routes []Route) {
 	for _, r := range routes {
 		hostname, err := NormalizeHostname(r.Hostname)
 		if err != nil {
-			log.Printf("Could not load %v: %v\n", r, err)
+			slog.Warn("skipping route with invalid hostname", "route", r, "err", err)
 			continue
 		}
 		r.Hostname = hostname
 		if r.Port <= 0 {
-			log.Printf("port is required. Route: %v\n", r)
+			slog.Warn("skipping route without port", "route", r)
 			continue
 		}
 		s.routes[r.Hostname] = r
