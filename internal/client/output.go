@@ -36,7 +36,7 @@ func Error(format string, v ...any) {
 
 // line returns s with exactly one trailing newline. It lets helpers own line discipline instead of every caller.
 func line(s string) string {
-	return strings.TrimSuffix(s, "\n") + "\n"
+	return strings.TrimRight(s, "\n") + "\n"
 }
 
 // paint wraps s in ANSI color codes, or returns it plain when colors are disabled.
